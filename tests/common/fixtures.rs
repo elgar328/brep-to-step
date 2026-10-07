@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use std::f64::consts::FRAC_1_SQRT_2;
+use std::f64::consts::{FRAC_1_SQRT_2, PI};
 
 use brep_to_step::{Curve, Frame, NurbsCurve, NurbsSurface, Profile, Surface, VoidShellNormals};
 
@@ -342,38 +342,63 @@ pub fn two_solids_one_part() -> Scene {
     scene
 }
 
-/// Every real solid: a closed, valid shape a CAD program should open
-/// cleanly. Each name doubles as a file name.
-pub fn real_solids() -> Vec<(&'static str, Scene)> {
+/// A real solid: a closed, valid shape a CAD program should open cleanly,
+/// with what it should measure.
+pub struct RealSolid {
+    /// Also its file name.
+    pub name: &'static str,
+    pub scene: Scene,
+    /// The volume of all its solids together, from the shape's own formula.
+    pub volume: f64,
+}
+
+/// Every real solid.
+pub fn real_solids() -> Vec<RealSolid> {
+    let solid = |name, scene, volume| RealSolid {
+        name,
+        scene,
+        volume,
+    };
+    let cylinder_volume = |radius: f64, height: f64| PI * radius * radius * height;
     vec![
-        ("cube", cube("cube", [0.0; 3], 1.0, LineKind::Along)),
-        (
+        solid("cube", cube("cube", [0.0; 3], 1.0, LineKind::Along), 1.0),
+        solid(
             "cube_lines_from_vertices",
             cube("cube", [0.0; 3], 1.0, LineKind::FromVertices),
+            1.0,
         ),
-        (
+        solid(
             "cube_off_origin",
             cube("cube", [0.1, -2.5, 1e-3], 12.7, LineKind::Along),
+            12.7 * 12.7 * 12.7,
         ),
-        ("cylinder", cylinder("cylinder", [0.0; 3], 2.5, 7.0, 1)),
-        (
+        solid(
+            "cylinder",
+            cylinder("cylinder", [0.0; 3], 2.5, 7.0, 1),
+            cylinder_volume(2.5, 7.0),
+        ),
+        solid(
             "cylinder_arc_rims",
             cylinder("cylinder", [1.5, -0.25, 3.0], 0.8, 12.7, 2),
+            cylinder_volume(0.8, 12.7),
         ),
-        (
+        solid(
             "plate_with_hole",
             plate_with_hole("plate", [40.0, 30.0, 5.0], 6.0),
+            40.0 * 30.0 * 5.0 - cylinder_volume(6.0, 5.0),
         ),
-        (
+        solid(
             "hollow_box_away",
             hollow_box(VoidShellNormals::AwayFromMaterial),
+            1000.0 - 64.0,
         ),
-        (
+        solid(
             "hollow_box_toward",
             hollow_box(VoidShellNormals::TowardMaterial),
+            1000.0 - 64.0,
         ),
-        ("two_parts", two_parts()),
-        ("two_solids_one_part", two_solids_one_part()),
+        solid("two_parts", two_parts(), 2.0),
+        solid("two_solids_one_part", two_solids_one_part(), 2.0),
     ]
 }
 

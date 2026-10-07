@@ -156,8 +156,8 @@ fn two_solids_in_one_part() {
 
 #[test]
 fn every_real_solid() {
-    for (name, scene) in real_solids() {
-        check_named(name, &scene);
+    for solid in real_solids() {
+        check_named(solid.name, &solid.scene);
     }
 }
 
