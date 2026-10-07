@@ -8,7 +8,7 @@ use crate::geometry::{self, Curve, Surface};
 use crate::header::{self, Header};
 use crate::p21::{Data, Ref};
 use crate::product::{self, Part, PendingPart};
-use crate::topology::{self, Bound, Edge, Face, Vertex};
+use crate::topology::{self, Bound, Edge, Face, Vertex, VoidShellNormals};
 
 /// Gives every writer its own id, which its handles carry.
 static NEXT_WRITER: AtomicU64 = AtomicU64::new(0);
@@ -164,6 +164,47 @@ impl StepWriter {
         }
         let faces: Vec<Ref> = faces.iter().map(|f| f.entity).collect();
         let solid = topology::write_solid(&mut self.data, &faces);
+        self.parts[part.index].solids.push(solid);
+        Ok(())
+    }
+
+    /// Add a solid with internal voids to `part`: `outer` closes into its
+    /// outer shell and each group in `voids` into a cavity shell, oriented
+    /// as `normals` declares.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ForeignHandle`] for a part or face from another writer;
+    /// [`Error::Empty`] for no outer faces, no voids, or a void with no
+    /// faces.
+    pub fn solid_with_voids(
+        &mut self,
+        part: Part,
+        outer: &[Face],
+        voids: &[Vec<Face>],
+        normals: VoidShellNormals,
+    ) -> Result<(), Error> {
+        self.check_writer(part.writer)?;
+        if outer.is_empty() {
+            return Err(Error::Empty {
+                what: "solid faces",
+            });
+        }
+        if voids.is_empty() {
+            return Err(Error::Empty { what: "voids" });
+        }
+        if voids.iter().any(Vec::is_empty) {
+            return Err(Error::Empty { what: "void faces" });
+        }
+        for face in outer.iter().chain(voids.iter().flatten()) {
+            self.check_writer(face.writer)?;
+        }
+        let outer: Vec<Ref> = outer.iter().map(|f| f.entity).collect();
+        let voids: Vec<Vec<Ref>> = voids
+            .iter()
+            .map(|faces| faces.iter().map(|f| f.entity).collect())
+            .collect();
+        let solid = topology::write_solid_with_voids(&mut self.data, &outer, &voids, normals);
         self.parts[part.index].solids.push(solid);
         Ok(())
     }

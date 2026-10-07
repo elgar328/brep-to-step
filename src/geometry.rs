@@ -29,6 +29,12 @@ pub enum Curve {
     /// runs with the edge. Keeping it parallel to the edge is the caller's
     /// part.
     LineAlong([f64; 3]),
+    /// The circle of `radius` in the frame's XY plane, centred at its
+    /// origin. With equal start and end vertices the edge is the full
+    /// circle; otherwise it is the arc from start to end, counter-clockwise
+    /// about the axis. (A clockwise arc is the same circle with its axis
+    /// negated.)
+    Circle { frame: Frame, radius: f64 },
 }
 
 /// The surface a face lies on.
@@ -37,6 +43,9 @@ pub enum Curve {
 pub enum Surface {
     /// The plane through the frame's origin, normal to its axis.
     Plane(Frame),
+    /// The cylinder of `radius` around the line through the frame's origin
+    /// along its axis.
+    Cylinder { frame: Frame, radius: f64 },
 }
 
 /// Every component must be finite.
@@ -58,6 +67,28 @@ fn check_direction(what: &'static str, d: [f64; 3]) -> Result<(), Error> {
     Ok(())
 }
 
+/// A radius must be finite and positive.
+fn check_radius(what: &'static str, radius: f64) -> Result<(), Error> {
+    if radius.is_finite() && radius > 0.0 {
+        Ok(())
+    } else {
+        Err(Error::InvalidNumber {
+            what,
+            value: radius,
+        })
+    }
+}
+
+/// A straight edge needs two distinct points.
+// Exactly coincident only, as in `check_direction`.
+#[allow(clippy::float_cmp)]
+fn check_not_coincident(start: [f64; 3], end: [f64; 3]) -> Result<(), Error> {
+    if start == end {
+        return Err(Error::ZeroLengthLine);
+    }
+    Ok(())
+}
+
 impl Frame {
     #[allow(clippy::float_cmp)] // exactly parallel only, as in `check_direction`
     fn check(&self, what: &'static str) -> Result<(), Error> {
@@ -72,17 +103,21 @@ impl Frame {
 }
 
 impl Curve {
-    /// Check the curve for an edge from `start` to `end`.
-    #[allow(clippy::float_cmp)] // exactly coincident only, as in `check_direction`
+    /// Check the curve for an edge from `start` to `end`. Only a straight
+    /// edge needs distinct ends: a circle's full-circle edge starts and ends
+    /// at one vertex.
     pub(crate) fn check(&self, start: [f64; 3], end: [f64; 3]) -> Result<(), Error> {
         match self {
-            Curve::Line => {}
-            Curve::LineAlong(direction) => check_direction("line direction", *direction)?,
+            Curve::Line => check_not_coincident(start, end),
+            Curve::LineAlong(direction) => {
+                check_direction("line direction", *direction)?;
+                check_not_coincident(start, end)
+            }
+            Curve::Circle { frame, radius } => {
+                frame.check("circle frame")?;
+                check_radius("circle radius", *radius)
+            }
         }
-        if start == end {
-            return Err(Error::ZeroLengthLine);
-        }
-        Ok(())
     }
 }
 
@@ -90,6 +125,10 @@ impl Surface {
     pub(crate) fn check(&self) -> Result<(), Error> {
         match self {
             Surface::Plane(frame) => frame.check("plane frame"),
+            Surface::Cylinder { frame, radius } => {
+                frame.check("cylinder frame")?;
+                check_radius("cylinder radius", *radius)
+            }
         }
     }
 }
@@ -130,6 +169,13 @@ pub(crate) fn write_placement(data: &mut Data, frame: &Frame) -> Ref {
 pub(crate) fn write_curve(data: &mut Data, curve: &Curve, start: [f64; 3], end: [f64; 3]) -> Ref {
     let delta = [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
     match curve {
+        Curve::Circle { frame, radius } => {
+            let position = write_placement(data, frame);
+            data.simple(
+                "CIRCLE",
+                &[Param::Str(""), Param::Ref(position), Param::Real(*radius)],
+            )
+        }
         Curve::Line => {
             let len = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
             let direction = [delta[0] / len, delta[1] / len, delta[2] / len];
@@ -169,6 +215,13 @@ pub(crate) fn write_surface(data: &mut Data, surface: &Surface) -> Ref {
         Surface::Plane(frame) => {
             let position = write_placement(data, frame);
             data.simple("PLANE", &[Param::Str(""), Param::Ref(position)])
+        }
+        Surface::Cylinder { frame, radius } => {
+            let position = write_placement(data, frame);
+            data.simple(
+                "CYLINDRICAL_SURFACE",
+                &[Param::Str(""), Param::Ref(position), Param::Real(*radius)],
+            )
         }
     }
 }

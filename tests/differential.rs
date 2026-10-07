@@ -4,8 +4,11 @@
 
 mod common;
 
+use brep_to_step::VoidShellNormals;
 use common::compare::assert_same_structure;
-use common::fixtures::{LineKind, cube};
+use common::fixtures::{
+    LineKind, cube, cylinder, hollow_box, plate_with_hole, two_parts, two_solids_one_part,
+};
 use common::scene::{Scene, write_ours, write_step_io};
 
 /// Compare with step-io, read back strictly, and return our file.
@@ -51,4 +54,66 @@ fn cube_entity_counts() {
     // 8 vertices + 12 line starts + 6 plane origins + 1 part origin: every
     // line and placement has its own point, as step-io writes them.
     assert_eq!(count(&file, "CARTESIAN_POINT"), 27);
+}
+
+#[test]
+fn cylinder_with_full_circle_rims() {
+    let file = check(&cylinder("cylinder", [0.0; 3], 2.5, 7.0, 1));
+    assert_eq!(count(&file, "CYLINDRICAL_SURFACE"), 1);
+    assert_eq!(count(&file, "ADVANCED_FACE"), 3);
+    assert_eq!(count(&file, "CIRCLE"), 2);
+    assert_eq!(count(&file, "VERTEX_POINT"), 2);
+}
+
+#[test]
+fn cylinder_with_arc_rims() {
+    let file = check(&cylinder("cylinder", [1.5, -0.25, 3.0], 0.8, 12.7, 2));
+    assert_eq!(count(&file, "CYLINDRICAL_SURFACE"), 1);
+    assert_eq!(count(&file, "ADVANCED_FACE"), 3);
+    assert_eq!(count(&file, "CIRCLE"), 4);
+    assert_eq!(count(&file, "VERTEX_POINT"), 4);
+}
+
+#[test]
+fn plate_with_a_hole() {
+    let file = check(&plate_with_hole("plate", [40.0, 30.0, 5.0], 6.0));
+    // An inner bound on the top, on the bottom, and on the hole's wall.
+    assert_eq!(count(&file, "FACE_BOUND"), 3);
+    assert_eq!(count(&file, "CYLINDRICAL_SURFACE"), 1);
+}
+
+#[test]
+fn hollow_box_with_both_void_windings() {
+    for (normals, flag) in [
+        (VoidShellNormals::AwayFromMaterial, ".T."),
+        (VoidShellNormals::TowardMaterial, ".F."),
+    ] {
+        let file = check(&hollow_box(normals));
+        assert_eq!(count(&file, "BREP_WITH_VOIDS"), 1);
+        assert_eq!(count(&file, "ORIENTED_CLOSED_SHELL"), 1);
+        assert_eq!(count(&file, "CLOSED_SHELL"), 2);
+        let oriented = file
+            .lines()
+            .find(|l| l.contains(" = ORIENTED_CLOSED_SHELL("))
+            .expect("oriented shell");
+        assert!(
+            oriented.ends_with(&format!("{flag});")),
+            "{normals:?}: {oriented}"
+        );
+    }
+}
+
+#[test]
+fn two_parts_in_one_file() {
+    let file = check(&two_parts());
+    assert_eq!(count(&file, "PRODUCT"), 2);
+    assert_eq!(count(&file, "SHAPE_DEFINITION_REPRESENTATION"), 2);
+    assert_eq!(count(&file, "PRODUCT_RELATED_PRODUCT_CATEGORY"), 1);
+}
+
+#[test]
+fn two_solids_in_one_part() {
+    let file = check(&two_solids_one_part());
+    assert_eq!(count(&file, "PRODUCT"), 1);
+    assert_eq!(count(&file, "MANIFOLD_SOLID_BREP"), 2);
 }

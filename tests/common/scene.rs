@@ -4,6 +4,7 @@
 
 use brep_to_step::{
     Bound, Curve, Edge, Face, Frame, Header, Part, StepWriter, Surface, Units, Vertex,
+    VoidShellNormals,
 };
 use step_io::StepBuilder;
 use step_io::build::{CurveInput, FaceBoundInput, HeaderInput, SurfaceInput};
@@ -23,8 +24,27 @@ pub struct Scene {
 #[derive(Debug, Clone)]
 pub struct PartSpec {
     pub name: String,
-    /// Each solid as the faces of its shell.
-    pub solids: Vec<Vec<usize>>,
+    pub solids: Vec<SolidSpec>,
+}
+
+/// A solid: the faces of its outer shell, and of each void shell.
+#[derive(Debug, Clone)]
+pub struct SolidSpec {
+    pub faces: Vec<usize>,
+    pub voids: Vec<Vec<usize>>,
+    /// How the void shells are wound; unused without voids.
+    pub normals: VoidShellNormals,
+}
+
+impl SolidSpec {
+    /// A solid without voids.
+    pub fn plain(faces: Vec<usize>) -> Self {
+        Self {
+            faces,
+            voids: Vec::new(),
+            normals: VoidShellNormals::AwayFromMaterial,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +66,48 @@ pub struct BoundSpec {
     pub outer: bool,
     /// Edge index, and whether the loop runs along the edge.
     pub edges: Vec<(usize, bool)>,
+}
+
+impl Scene {
+    /// Append `other`'s vertices, edges, faces, and parts, shifting the
+    /// indices inside them to their new places.
+    pub fn merge(&mut self, other: Scene) {
+        let (dv, de, df) = (self.vertices.len(), self.edges.len(), self.faces.len());
+        self.vertices.extend(other.vertices);
+        self.edges.extend(other.edges.into_iter().map(|e| EdgeSpec {
+            start: e.start + dv,
+            end: e.end + dv,
+            curve: e.curve,
+        }));
+        self.faces.extend(other.faces.into_iter().map(|f| {
+            FaceSpec {
+                bounds: f
+                    .bounds
+                    .into_iter()
+                    .map(|b| BoundSpec {
+                        outer: b.outer,
+                        edges: b.edges.into_iter().map(|(i, fwd)| (i + de, fwd)).collect(),
+                    })
+                    .collect(),
+                ..f
+            }
+        }));
+        let shift = |faces: Vec<usize>| faces.into_iter().map(|i| i + df).collect();
+        self.parts.extend(other.parts.into_iter().map(|p| {
+            PartSpec {
+                name: p.name,
+                solids: p
+                    .solids
+                    .into_iter()
+                    .map(|s| SolidSpec {
+                        faces: shift(s.faces),
+                        voids: s.voids.into_iter().map(shift).collect(),
+                        normals: s.normals,
+                    })
+                    .collect(),
+            }
+        }));
+    }
 }
 
 /// The brep-to-step handles a [`replay`] made, by scene index.
@@ -94,8 +156,16 @@ pub fn replay(w: &mut StepWriter, scene: &Scene) -> Handles {
         .collect();
     for (part, spec) in parts.iter().zip(&scene.parts) {
         for solid in &spec.solids {
-            let shell: Vec<Face> = solid.iter().map(|&i| faces[i]).collect();
-            w.solid(*part, &shell).expect("solid");
+            let pick =
+                |indices: &[usize]| -> Vec<Face> { indices.iter().map(|&i| faces[i]).collect() };
+            let shell = pick(&solid.faces);
+            if solid.voids.is_empty() {
+                w.solid(*part, &shell).expect("solid");
+            } else {
+                let voids: Vec<Vec<Face>> = solid.voids.iter().map(|v| pick(v)).collect();
+                w.solid_with_voids(*part, &shell, &voids, solid.normals)
+                    .expect("solid with voids");
+            }
         }
     }
     Handles {
@@ -172,9 +242,24 @@ pub fn write_step_io(scene: &Scene) -> String {
         .collect();
     for (part, spec) in parts.iter().zip(&scene.parts) {
         for solid in &spec.solids {
-            let shell = solid.iter().map(|&i| faces[i]).collect();
+            let pick =
+                |indices: &[usize]| -> Vec<_> { indices.iter().map(|&i| faces[i]).collect() };
             // brep-to-step writes every solid name empty.
-            b.solid(*part, "", shell).expect("solid");
+            if solid.voids.is_empty() {
+                b.solid(*part, "", pick(&solid.faces)).expect("solid");
+            } else {
+                let voids = solid.voids.iter().map(|v| pick(v)).collect();
+                let normals = match solid.normals {
+                    VoidShellNormals::AwayFromMaterial => {
+                        step_io::build::VoidShellNormals::AwayFromMaterial
+                    }
+                    VoidShellNormals::TowardMaterial => {
+                        step_io::build::VoidShellNormals::TowardMaterial
+                    }
+                };
+                b.solid_with_voids(*part, "", pick(&solid.faces), voids, normals)
+                    .expect("solid with voids");
+            }
         }
     }
     b.finish().expect("finish")
@@ -192,6 +277,7 @@ fn step_io_curve(curve: &Curve) -> CurveInput {
     match curve {
         Curve::Line => CurveInput::Line,
         Curve::LineAlong(direction) => CurveInput::LineAlong(*direction),
+        Curve::Circle { frame, radius } => CurveInput::Circle(step_io_frame(frame), *radius),
         other => panic!("no step-io mapping yet for {other:?}"),
     }
 }
@@ -199,6 +285,9 @@ fn step_io_curve(curve: &Curve) -> CurveInput {
 fn step_io_surface(surface: &Surface) -> SurfaceInput {
     match surface {
         Surface::Plane(frame) => SurfaceInput::Plane(step_io_frame(frame)),
+        Surface::Cylinder { frame, radius } => {
+            SurfaceInput::Cylinder(step_io_frame(frame), *radius)
+        }
         other => panic!("no step-io mapping yet for {other:?}"),
     }
 }

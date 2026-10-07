@@ -52,6 +52,26 @@ impl Bound {
     }
 }
 
+/// Which way the face normals of a solid's void shells point, so the
+/// writer can orient each cavity without evaluating geometry.
+///
+/// STEP orients every bounding shell with its face normals pointing away
+/// from the material: outward into free space for the outer shell, and into
+/// the empty cavity for a void. Look along a cavity wall's normal: into the
+/// empty hole means [`AwayFromMaterial`](Self::AwayFromMaterial), into the
+/// surrounding solid means [`TowardMaterial`](Self::TowardMaterial). The
+/// wrong choice turns the void inside out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VoidShellNormals {
+    /// The faces already point into the cavity, by the same rule as the
+    /// outer shell — what most kernels produce for a cavity (a reversed
+    /// shell). Written as authored.
+    AwayFromMaterial,
+    /// The faces point into the surrounding material — a cavity wound like
+    /// an ordinary outward-facing solid. Written reversed.
+    TowardMaterial,
+}
+
 pub(crate) fn write_vertex(data: &mut Data, p: [f64; 3]) -> Ref {
     let point = write_point(data, p);
     data.simple("VERTEX_POINT", &[Param::Str(""), Param::Ref(point)])
@@ -114,4 +134,38 @@ pub(crate) fn write_face(data: &mut Data, surface: Ref, same_sense: bool, bounds
 pub(crate) fn write_solid(data: &mut Data, faces: &[Ref]) -> Ref {
     let shell = data.simple("CLOSED_SHELL", &[Param::Str(""), Param::Refs(faces)]);
     data.simple("MANIFOLD_SOLID_BREP", &[Param::Str(""), Param::Ref(shell)])
+}
+
+/// A solid with internal voids: the outer shell, and each void shell wrapped
+/// in an `ORIENTED_CLOSED_SHELL` that keeps (`.T.`) or reverses (`.F.`) it.
+pub(crate) fn write_solid_with_voids(
+    data: &mut Data,
+    outer: &[Ref],
+    voids: &[Vec<Ref>],
+    normals: VoidShellNormals,
+) -> Ref {
+    let outer = data.simple("CLOSED_SHELL", &[Param::Str(""), Param::Refs(outer)]);
+    let keep = match normals {
+        VoidShellNormals::AwayFromMaterial => true,
+        VoidShellNormals::TowardMaterial => false,
+    };
+    let oriented: Vec<Ref> = voids
+        .iter()
+        .map(|faces| {
+            let shell = data.simple("CLOSED_SHELL", &[Param::Str(""), Param::Refs(faces)]);
+            data.simple(
+                "ORIENTED_CLOSED_SHELL",
+                &[
+                    Param::Str(""),
+                    Param::Derived,
+                    Param::Ref(shell),
+                    Param::Bool(keep),
+                ],
+            )
+        })
+        .collect();
+    data.simple(
+        "BREP_WITH_VOIDS",
+        &[Param::Str(""), Param::Ref(outer), Param::Refs(&oriented)],
+    )
 }

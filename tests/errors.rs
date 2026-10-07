@@ -3,7 +3,7 @@
 
 mod common;
 
-use brep_to_step::{Bound, Curve, Error, Frame, StepWriter, Surface, Units};
+use brep_to_step::{Bound, Curve, Error, Frame, StepWriter, Surface, Units, VoidShellNormals};
 use common::fixtures::{LineKind, cube};
 use common::scene::{Handles, header, replay, write_ours};
 
@@ -285,5 +285,167 @@ fn rejected_calls_leave_no_trace() {
     assert!(w.solid(h.parts[0], &[]).is_err());
     assert!(w.solid(h.parts[0], &[h.faces[0], other.faces[0]]).is_err());
 
+    let circle = |radius| Curve::Circle {
+        frame: frame(),
+        radius,
+    };
+    assert!(w.edge(h.vertices[0], h.vertices[0], circle(0.0)).is_err());
+    assert!(
+        w.face(
+            Surface::Cylinder {
+                frame: frame(),
+                radius: -1.0
+            },
+            true,
+            &[Bound::outer(vec![(edge, true)])]
+        )
+        .is_err()
+    );
+    let away = VoidShellNormals::AwayFromMaterial;
+    assert!(w.solid_with_voids(h.parts[0], &h.faces, &[], away).is_err());
+    assert!(
+        w.solid_with_voids(h.parts[0], &h.faces, &[vec![other.faces[0]]], away)
+            .is_err()
+    );
+
     assert_eq!(w.finish(&header()).expect("finish"), clean);
+}
+
+#[test]
+fn radii_must_be_finite_and_positive() {
+    let (mut w, h) = with_cube();
+    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    for bad in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+        assert!(matches!(
+            w.edge(
+                h.vertices[0],
+                h.vertices[0],
+                Curve::Circle {
+                    frame: frame(),
+                    radius: bad
+                }
+            ),
+            Err(Error::InvalidNumber {
+                what: "circle radius",
+                ..
+            })
+        ));
+        assert!(matches!(
+            w.face(
+                Surface::Cylinder {
+                    frame: frame(),
+                    radius: bad
+                },
+                true,
+                std::slice::from_ref(&bound)
+            ),
+            Err(Error::InvalidNumber {
+                what: "cylinder radius",
+                ..
+            })
+        ));
+    }
+}
+
+#[test]
+fn circle_and_cylinder_frames_are_checked() {
+    let (mut w, h) = with_cube();
+    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let circle = |frame| Curve::Circle { frame, radius: 1.0 };
+    let v0 = h.vertices[0];
+    assert!(matches!(
+        w.edge(
+            v0,
+            v0,
+            circle(Frame {
+                origin: [f64::NAN, 0.0, 0.0],
+                ..frame()
+            })
+        ),
+        Err(Error::InvalidNumber {
+            what: "circle frame",
+            ..
+        })
+    ));
+    assert!(matches!(
+        w.edge(
+            v0,
+            v0,
+            circle(Frame {
+                axis: [0.0; 3],
+                ..frame()
+            })
+        ),
+        Err(Error::ZeroVector {
+            what: "circle frame"
+        })
+    ));
+    assert!(matches!(
+        w.face(
+            Surface::Cylinder {
+                frame: Frame {
+                    ref_dir: [0.0, 0.0, 3.0],
+                    ..frame()
+                },
+                radius: 1.0
+            },
+            true,
+            &[bound]
+        ),
+        Err(Error::ParallelAxes {
+            what: "cylinder frame"
+        })
+    ));
+}
+
+/// Unlike a straight edge, a circle may start and end at one vertex.
+#[test]
+fn circle_edges_may_close() {
+    let (mut w, h) = with_cube();
+    let circle = Curve::Circle {
+        frame: frame(),
+        radius: 1.0,
+    };
+    assert!(w.edge(h.vertices[0], h.vertices[0], circle.clone()).is_ok());
+    assert!(w.edge(h.vertices[0], h.vertices[1], circle).is_ok());
+}
+
+#[test]
+fn voids_need_faces() {
+    let (mut w, h) = with_cube();
+    let away = VoidShellNormals::AwayFromMaterial;
+    let some = vec![h.faces[0]];
+    assert!(matches!(
+        w.solid_with_voids(h.parts[0], &[], std::slice::from_ref(&some), away),
+        Err(Error::Empty {
+            what: "solid faces"
+        })
+    ));
+    assert!(matches!(
+        w.solid_with_voids(h.parts[0], &h.faces, &[], away),
+        Err(Error::Empty { what: "voids" })
+    ));
+    assert!(matches!(
+        w.solid_with_voids(h.parts[0], &h.faces, &[some, Vec::new()], away),
+        Err(Error::Empty { what: "void faces" })
+    ));
+}
+
+#[test]
+fn voids_reject_foreign_handles() {
+    let (mut w, h) = with_cube();
+    let (_other_writer, other) = with_cube();
+    let away = VoidShellNormals::AwayFromMaterial;
+    assert!(matches!(
+        w.solid_with_voids(other.parts[0], &h.faces, &[vec![h.faces[0]]], away),
+        Err(Error::ForeignHandle)
+    ));
+    assert!(matches!(
+        w.solid_with_voids(h.parts[0], &other.faces, &[vec![h.faces[0]]], away),
+        Err(Error::ForeignHandle)
+    ));
+    assert!(matches!(
+        w.solid_with_voids(h.parts[0], &h.faces, &[vec![other.faces[0]]], away),
+        Err(Error::ForeignHandle)
+    ));
 }

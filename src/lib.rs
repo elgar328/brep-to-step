@@ -24,5 +24,5 @@ pub use error::Error;
 pub use geometry::{Curve, Frame, Surface};
 pub use header::Header;
 pub use product::Part;
-pub use topology::{Bound, Edge, Face, Vertex};
+pub use topology::{Bound, Edge, Face, Vertex, VoidShellNormals};
 pub use writer::StepWriter;
