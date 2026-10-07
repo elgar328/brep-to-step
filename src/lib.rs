@@ -14,6 +14,7 @@ mod context;
 mod error;
 mod geometry;
 mod header;
+mod nurbs;
 mod p21;
 mod product;
 mod topology;
@@ -21,8 +22,9 @@ mod writer;
 
 pub use context::{LengthUnit, Units};
 pub use error::Error;
-pub use geometry::{Curve, Frame, Surface};
+pub use geometry::{Curve, Frame, Profile, Surface};
 pub use header::Header;
+pub use nurbs::{NurbsCurve, NurbsSurface};
 pub use product::Part;
 pub use topology::{Bound, Edge, Face, Vertex, VoidShellNormals};
 pub use writer::StepWriter;

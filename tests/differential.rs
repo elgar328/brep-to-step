@@ -4,10 +4,11 @@
 
 mod common;
 
-use brep_to_step::VoidShellNormals;
-use common::compare::assert_same_structure;
+use brep_to_step::{Curve, Surface, VoidShellNormals};
+use common::compare::{assert_same_structure, compare};
 use common::fixtures::{
-    LineKind, cube, cylinder, hollow_box, plate_with_hole, two_parts, two_solids_one_part,
+    LineKind, coverage, cube, cubic, cylinder, grid, hollow_box, plate_with_hole, quarter_arc,
+    real_solids, two_parts, two_solids_one_part,
 };
 use common::scene::{Scene, write_ours, write_step_io};
 
@@ -21,9 +22,44 @@ fn check(scene: &Scene) -> String {
     ours
 }
 
+/// [`check`] for a named shape from a list, naming it on failure.
+fn check_named(name: &str, scene: &Scene) -> String {
+    let ours = write_ours(scene);
+    if let Err(report) = compare(&ours, &write_step_io(scene)) {
+        panic!("{name}: brep-to-step and step-io files differ:\n{report}");
+    }
+    let (_, report) = step_io::read(ours.as_bytes()).expect("read");
+    assert!(
+        report.dropped.is_empty(),
+        "{name}: dropped {:?}",
+        report.dropped
+    );
+    assert!(
+        report.norm.is_empty(),
+        "{name}: normalized {:?}",
+        report.norm
+    );
+    ours
+}
+
+/// The shape `name` from a fixture list.
+fn find(list: Vec<(&'static str, Scene)>, name: &str) -> Scene {
+    list.into_iter()
+        .find(|(n, _)| *n == name)
+        .unwrap_or_else(|| panic!("no shape {name}"))
+        .1
+}
+
 /// How many simple instances of `entity` the file holds.
 fn count(file: &str, entity: &str) -> usize {
     file.matches(&format!(" = {entity}(")).count()
+}
+
+/// How many times `part` appears inside complex instances. A simple
+/// instance of the same name would count too, so use it only for names that
+/// are always parts.
+fn count_part(file: &str, part: &str) -> usize {
+    file.matches(&format!(" {part}(")).count()
 }
 
 #[test]
@@ -116,4 +152,66 @@ fn two_solids_in_one_part() {
     let file = check(&two_solids_one_part());
     assert_eq!(count(&file, "PRODUCT"), 1);
     assert_eq!(count(&file, "MANIFOLD_SOLID_BREP"), 2);
+}
+
+#[test]
+fn every_real_solid() {
+    for (name, scene) in real_solids() {
+        check_named(name, &scene);
+    }
+}
+
+#[test]
+fn every_coverage_shape() {
+    for (name, scene) in coverage() {
+        check_named(name, &scene);
+    }
+}
+
+#[test]
+fn nurbs_curves_rational_or_not() {
+    let plain = check_named("nurbs_edge", &find(coverage(), "nurbs_edge"));
+    assert_eq!(count(&plain, "B_SPLINE_CURVE_WITH_KNOTS"), 1);
+    assert_eq!(count_part(&plain, "RATIONAL_B_SPLINE_CURVE"), 0);
+
+    let rational = check_named(
+        "rational_nurbs_edge",
+        &find(coverage(), "rational_nurbs_edge"),
+    );
+    assert_eq!(count(&rational, "B_SPLINE_CURVE_WITH_KNOTS"), 0);
+    assert_eq!(count_part(&rational, "RATIONAL_B_SPLINE_CURVE"), 1);
+}
+
+#[test]
+fn nurbs_surface_points() {
+    let file = check_named("nurbs_surface", &find(coverage(), "nurbs_surface"));
+    // 12 control points + the boundary's vertex + its circle's placement
+    // origin + the part origin.
+    assert_eq!(count(&file, "CARTESIAN_POINT"), 15);
+    assert_eq!(count(&file, "B_SPLINE_SURFACE_WITH_KNOTS"), 1);
+}
+
+/// `Some` weights write a rational B-spline even when every weight is 1 —
+/// the caller says what the curve is. step-io writes these non-rational, so
+/// only brep-to-step's own file is checked.
+#[test]
+fn unit_weights_stay_rational() {
+    let mut scene = find(coverage(), "rational_nurbs_edge");
+    scene.edges[0].curve = Curve::Nurbs(quarter_arc(Some(vec![1.0; 3])));
+    let file = write_ours(&scene);
+    assert_eq!(count_part(&file, "RATIONAL_B_SPLINE_CURVE"), 1);
+    assert_eq!(count(&file, "B_SPLINE_CURVE_WITH_KNOTS"), 0);
+
+    let mut scene = find(coverage(), "nurbs_surface");
+    let mut surface = grid(false);
+    surface.weights = Some(vec![vec![1.0; 4]; 3]);
+    scene.faces[0].surface = Surface::Nurbs(surface);
+    let file = write_ours(&scene);
+    assert_eq!(count_part(&file, "RATIONAL_B_SPLINE_SURFACE"), 1);
+    assert_eq!(count(&file, "B_SPLINE_SURFACE_WITH_KNOTS"), 0);
+
+    // And with no weights, the same data is plain.
+    let mut scene = find(coverage(), "nurbs_edge");
+    scene.edges[0].curve = Curve::Nurbs(cubic());
+    assert_eq!(count(&write_ours(&scene), "B_SPLINE_CURVE_WITH_KNOTS"), 1);
 }

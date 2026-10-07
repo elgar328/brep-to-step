@@ -25,10 +25,15 @@ pub enum Error {
     },
     /// A straight edge whose two vertices are at the same point.
     ZeroLengthLine,
-    /// A list that must not be empty.
+    /// A list with fewer entries than it needs.
     Empty {
         /// Which list.
         what: &'static str,
+    },
+    /// A NURBS curve or surface breaking one of STEP's B-spline rules.
+    InvalidNurbs {
+        /// Which rule.
+        reason: &'static str,
     },
     /// A face with more than one outer bound.
     MultipleOuterBounds,
@@ -59,7 +64,8 @@ impl fmt::Display for Error {
             Self::ZeroLengthLine => {
                 f.write_str("straight edge with both vertices at the same point")
             }
-            Self::Empty { what } => write!(f, "no {what}"),
+            Self::Empty { what } => write!(f, "too few {what}"),
+            Self::InvalidNurbs { reason } => write!(f, "invalid NURBS: {reason}"),
             Self::MultipleOuterBounds => f.write_str("face with more than one outer bound"),
             Self::ForeignHandle => f.write_str("handle from a different writer"),
             Self::EmptyPart { name } => write!(f, "part {name:?} has no solid"),

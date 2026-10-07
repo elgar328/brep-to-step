@@ -3,8 +3,13 @@
 
 mod common;
 
-use brep_to_step::{Bound, Curve, Error, Frame, StepWriter, Surface, Units, VoidShellNormals};
-use common::fixtures::{LineKind, cube};
+use std::f64::consts::FRAC_PI_2;
+
+use brep_to_step::{
+    Bound, Curve, Error, Frame, NurbsCurve, NurbsSurface, Profile, StepWriter, Surface, Units,
+    VoidShellNormals,
+};
+use common::fixtures::{LineKind, cube, cubic, grid};
 use common::scene::{Handles, header, replay, write_ours};
 
 fn writer() -> StepWriter {
@@ -285,6 +290,15 @@ fn rejected_calls_leave_no_trace() {
     assert!(w.solid(h.parts[0], &[]).is_err());
     assert!(w.solid(h.parts[0], &[h.faces[0], other.faces[0]]).is_err());
 
+    reject_curved_calls(&mut w, &h, &other);
+
+    assert_eq!(w.finish(&header()).expect("finish"), clean);
+}
+
+/// Rejected calls on curved geometry, voids, and NURBS, for
+/// [`rejected_calls_leave_no_trace`].
+fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
+    let edge = h.edges[0];
     let circle = |radius| Curve::Circle {
         frame: frame(),
         radius,
@@ -308,7 +322,34 @@ fn rejected_calls_leave_no_trace() {
             .is_err()
     );
 
-    assert_eq!(w.finish(&header()).expect("finish"), clean);
+    let mut bad_curve = cubic();
+    bad_curve.knots = vec![0.0, 0.5, 0.5];
+    assert!(
+        w.edge(
+            h.vertices[0],
+            h.vertices[1],
+            Curve::Nurbs(bad_curve.clone())
+        )
+        .is_err()
+    );
+    let bound = Bound::outer(vec![(edge, true)]);
+    let bad_extrusion = |profile, sweep| Surface::LinearExtrusion { profile, sweep };
+    assert!(
+        w.face(
+            bad_extrusion(Profile::Nurbs(bad_curve), [0.0, 0.0, 1.0]),
+            true,
+            std::slice::from_ref(&bound)
+        )
+        .is_err()
+    );
+    assert!(
+        w.face(
+            bad_extrusion(Profile::Nurbs(cubic()), [0.0; 3]),
+            true,
+            std::slice::from_ref(&bound)
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -447,5 +488,248 @@ fn voids_reject_foreign_handles() {
     assert!(matches!(
         w.solid_with_voids(h.parts[0], &h.faces, &[vec![other.faces[0]]], away),
         Err(Error::ForeignHandle)
+    ));
+}
+
+/// A face on `surface`, bounded by the cube's first edge.
+fn face_on(surface: Surface) -> Result<(), Error> {
+    let (mut w, h) = with_cube();
+    w.face(surface, true, &[Bound::outer(vec![(h.edges[0], true)])])
+        .map(|_| ())
+}
+
+/// An edge between the cube's first two vertices along `curve`.
+fn edge_along(curve: Curve) -> Result<(), Error> {
+    let (mut w, h) = with_cube();
+    w.edge(h.vertices[0], h.vertices[1], curve).map(|_| ())
+}
+
+fn invalid_number(result: &Result<(), Error>, expected: &str) -> bool {
+    matches!(result, Err(Error::InvalidNumber { what, .. }) if *what == expected)
+}
+
+#[test]
+fn analytic_sizes() {
+    for bad in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+        let ellipse = |a, b| Curve::Ellipse {
+            frame: frame(),
+            semi_axis_1: a,
+            semi_axis_2: b,
+        };
+        assert!(invalid_number(
+            &edge_along(ellipse(bad, 1.0)),
+            "ellipse semi-axis"
+        ));
+        assert!(invalid_number(
+            &edge_along(ellipse(1.0, bad)),
+            "ellipse semi-axis"
+        ));
+        assert!(invalid_number(
+            &face_on(Surface::Sphere {
+                frame: frame(),
+                radius: bad
+            }),
+            "sphere radius"
+        ));
+        let torus = |major_radius, minor_radius| Surface::Torus {
+            frame: frame(),
+            major_radius,
+            minor_radius,
+        };
+        assert!(invalid_number(
+            &face_on(torus(bad, 1.0)),
+            "torus major radius"
+        ));
+        assert!(invalid_number(
+            &face_on(torus(5.0, bad)),
+            "torus minor radius"
+        ));
+    }
+}
+
+#[test]
+fn cone_radius_and_angle() {
+    let cone = |radius, semi_angle| Surface::Cone {
+        frame: frame(),
+        radius,
+        semi_angle,
+    };
+    assert!(face_on(cone(0.0, 0.4)).is_ok(), "an apex at the origin");
+    for bad in [f64::NAN, -1.0] {
+        assert!(invalid_number(&face_on(cone(bad, 0.4)), "cone radius"));
+    }
+    for bad in [f64::NAN, 0.0, -0.4, FRAC_PI_2, 2.0] {
+        assert!(invalid_number(&face_on(cone(1.0, bad)), "cone semi-angle"));
+    }
+}
+
+#[test]
+fn polylines() {
+    assert!(matches!(
+        edge_along(Curve::Polyline(vec![[0.0; 3]])),
+        Err(Error::Empty {
+            what: "polyline points"
+        })
+    ));
+    assert!(invalid_number(
+        &edge_along(Curve::Polyline(vec![[0.0; 3], [f64::NAN, 0.0, 0.0]])),
+        "polyline point"
+    ));
+}
+
+#[test]
+fn swept_surface_directions() {
+    let profile = || Profile::Nurbs(cubic());
+    assert!(matches!(
+        face_on(Surface::LinearExtrusion {
+            profile: profile(),
+            sweep: [0.0; 3]
+        }),
+        Err(Error::ZeroVector {
+            what: "extrusion sweep"
+        })
+    ));
+    assert!(matches!(
+        face_on(Surface::Revolution {
+            profile: profile(),
+            axis_origin: [0.0; 3],
+            axis_direction: [0.0; 3]
+        }),
+        Err(Error::ZeroVector {
+            what: "revolution axis"
+        })
+    ));
+    assert!(invalid_number(
+        &face_on(Surface::Revolution {
+            profile: profile(),
+            axis_origin: [f64::NAN, 0.0, 0.0],
+            axis_direction: [0.0, 0.0, 1.0]
+        }),
+        "revolution axis"
+    ));
+    assert!(matches!(
+        face_on(Surface::LinearExtrusion {
+            profile: Profile::Line {
+                point: [0.0; 3],
+                direction: [0.0; 3]
+            },
+            sweep: [0.0, 0.0, 1.0]
+        }),
+        Err(Error::ZeroVector {
+            what: "profile line"
+        })
+    ));
+}
+
+/// A change that breaks one NURBS curve rule.
+type CurveEdit = Box<dyn FnOnce(&mut NurbsCurve)>;
+
+/// The rule a NURBS curve breaks, if any.
+fn nurbs_curve_error(edit: impl FnOnce(&mut NurbsCurve)) -> Result<(), Error> {
+    let mut curve = cubic();
+    edit(&mut curve);
+    edge_along(Curve::Nurbs(curve))
+}
+
+fn nurbs_reason(result: Result<(), Error>) -> &'static str {
+    match result {
+        Err(Error::InvalidNurbs { reason }) => reason,
+        other => panic!("expected InvalidNurbs, got {other:?}"),
+    }
+}
+
+#[test]
+fn nurbs_curve_rules() {
+    assert!(nurbs_curve_error(|_| {}).is_ok());
+    let cases: [(&str, CurveEdit); 10] = [
+        ("degree must be at least 1", Box::new(|c| c.degree = 0)),
+        (
+            "needs at least degree + 1 control points",
+            Box::new(|c| c.control_points.truncate(3)),
+        ),
+        (
+            "knots and multiplicities differ in count",
+            Box::new(|c| {
+                c.multiplicities.pop();
+            }),
+        ),
+        (
+            "needs at least two distinct knots",
+            Box::new(|c| {
+                c.knots = vec![0.0];
+                c.multiplicities = vec![9];
+            }),
+        ),
+        ("knots must be finite", Box::new(|c| c.knots[1] = f64::NAN)),
+        ("knots must increase", Box::new(|c| c.knots[1] = 1.0)),
+        (
+            "multiplicities must be at least 1",
+            Box::new(|c| c.multiplicities = vec![4, 0, 4]),
+        ),
+        (
+            "end multiplicities may be at most degree + 1",
+            Box::new(|c| c.multiplicities = vec![5, 1, 3]),
+        ),
+        (
+            "interior multiplicities may be at most degree",
+            Box::new(|c| {
+                c.multiplicities = vec![2, 4, 3];
+            }),
+        ),
+        (
+            "multiplicities must sum to control points + degree + 1",
+            Box::new(|c| c.multiplicities = vec![4, 2, 4]),
+        ),
+    ];
+    for (reason, edit) in cases {
+        assert_eq!(nurbs_reason(nurbs_curve_error(edit)), reason);
+    }
+    assert_eq!(
+        nurbs_reason(nurbs_curve_error(|c| c.weights = Some(vec![1.0; 4]))),
+        "needs one weight per control point"
+    );
+    assert!(invalid_number(
+        &nurbs_curve_error(|c| c.weights = Some(vec![1.0, 1.0, 0.0, 1.0, 1.0])),
+        "weight"
+    ));
+    assert!(invalid_number(
+        &nurbs_curve_error(|c| c.control_points[2][1] = f64::INFINITY),
+        "control point"
+    ));
+}
+
+/// The rule a NURBS surface breaks, if any.
+fn nurbs_surface_error(edit: impl FnOnce(&mut NurbsSurface)) -> Result<(), Error> {
+    let mut surface = grid(false);
+    edit(&mut surface);
+    face_on(Surface::Nurbs(surface))
+}
+
+#[test]
+fn nurbs_surface_rules() {
+    assert!(nurbs_surface_error(|_| {}).is_ok());
+    assert_eq!(
+        nurbs_reason(nurbs_surface_error(|s| {
+            s.control_points[1].pop();
+        })),
+        "control point rows differ in length"
+    );
+    assert_eq!(
+        nurbs_reason(nurbs_surface_error(|s| s.knots_u = vec![1.0, 0.0])),
+        "u knots must increase"
+    );
+    assert_eq!(
+        nurbs_reason(nurbs_surface_error(|s| s.multiplicities_v = vec![4, 3])),
+        "v multiplicities must sum to control points per row + degree + 1"
+    );
+    assert_eq!(
+        nurbs_reason(nurbs_surface_error(
+            |s| s.weights = Some(vec![vec![1.0; 4]; 2])
+        )),
+        "needs one weight per control point"
+    );
+    assert!(invalid_number(
+        &nurbs_surface_error(|s| s.weights = Some(vec![vec![1.0, 1.0, -0.5, 1.0]; 3])),
+        "weight"
     ));
 }

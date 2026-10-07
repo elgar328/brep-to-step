@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use brep_to_step::{Curve, Frame, Surface, VoidShellNormals};
+use std::f64::consts::FRAC_1_SQRT_2;
+
+use brep_to_step::{Curve, Frame, NurbsCurve, NurbsSurface, Profile, Surface, VoidShellNormals};
 
 use super::scene::{BoundSpec, EdgeSpec, FaceSpec, PartSpec, Scene, SolidSpec};
 
@@ -338,4 +340,328 @@ pub fn two_solids_one_part() -> Scene {
     "pair".clone_into(&mut scene.parts[0].name);
     scene.parts[0].solids.extend(right.solids);
     scene
+}
+
+/// Every real solid: a closed, valid shape a CAD program should open
+/// cleanly. Each name doubles as a file name.
+pub fn real_solids() -> Vec<(&'static str, Scene)> {
+    vec![
+        ("cube", cube("cube", [0.0; 3], 1.0, LineKind::Along)),
+        (
+            "cube_lines_from_vertices",
+            cube("cube", [0.0; 3], 1.0, LineKind::FromVertices),
+        ),
+        (
+            "cube_off_origin",
+            cube("cube", [0.1, -2.5, 1e-3], 12.7, LineKind::Along),
+        ),
+        ("cylinder", cylinder("cylinder", [0.0; 3], 2.5, 7.0, 1)),
+        (
+            "cylinder_arc_rims",
+            cylinder("cylinder", [1.5, -0.25, 3.0], 0.8, 12.7, 2),
+        ),
+        (
+            "plate_with_hole",
+            plate_with_hole("plate", [40.0, 30.0, 5.0], 6.0),
+        ),
+        (
+            "hollow_box_away",
+            hollow_box(VoidShellNormals::AwayFromMaterial),
+        ),
+        (
+            "hollow_box_toward",
+            hollow_box(VoidShellNormals::TowardMaterial),
+        ),
+        ("two_parts", two_parts()),
+        ("two_solids_one_part", two_solids_one_part()),
+    ]
+}
+
+/// Every coverage shape: one face per curve or surface kind, and part names
+/// that need escaping, for comparing with step-io and reading back. Their
+/// shells are open — not solids a CAD program would accept.
+pub fn coverage() -> Vec<(&'static str, Scene)> {
+    [curve_coverage(), surface_coverage(), name_coverage()].concat()
+}
+
+/// A plane face bounded by each kind of curve.
+fn curve_coverage() -> Vec<(&'static str, Scene)> {
+    vec![
+        (
+            "ellipse_edge",
+            on_plane_closed(
+                Curve::Ellipse {
+                    frame: upright([0.0; 3]),
+                    semi_axis_1: 3.0,
+                    semi_axis_2: 1.5,
+                },
+                [3.0, 0.0, 0.0],
+            ),
+        ),
+        (
+            "polyline_edge",
+            on_plane_open(Curve::Polyline(vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [3.0, 1.0, 0.0],
+                [4.0, 0.0, 0.0],
+            ])),
+        ),
+        ("nurbs_edge", on_plane_open(Curve::Nurbs(cubic()))),
+        (
+            "rational_nurbs_edge",
+            on_plane_open(Curve::Nurbs(quarter_arc(Some(vec![
+                1.0,
+                FRAC_1_SQRT_2,
+                1.0,
+            ])))),
+        ),
+    ]
+}
+
+/// A face on each kind of surface.
+fn surface_coverage() -> Vec<(&'static str, Scene)> {
+    let extrude = |profile| Surface::LinearExtrusion {
+        profile,
+        sweep: [0.0, 0.0, 3.0],
+    };
+    let revolve = |profile| Surface::Revolution {
+        profile,
+        axis_origin: [0.0; 3],
+        axis_direction: [0.0, 0.0, 1.0],
+    };
+    vec![
+        (
+            "sphere",
+            on_surface(Surface::Sphere {
+                frame: upright([0.0; 3]),
+                radius: 2.0,
+            }),
+        ),
+        (
+            "torus",
+            on_surface(Surface::Torus {
+                frame: upright([0.0; 3]),
+                major_radius: 5.0,
+                minor_radius: 1.0,
+            }),
+        ),
+        (
+            "cone",
+            on_surface(Surface::Cone {
+                frame: upright([0.0; 3]),
+                radius: 2.0,
+                semi_angle: 0.4,
+            }),
+        ),
+        (
+            "extrusion_of_line",
+            on_surface(extrude(Profile::Line {
+                point: [0.0; 3],
+                direction: [1.0, 0.0, 0.0],
+            })),
+        ),
+        (
+            "extrusion_of_circle",
+            on_surface(extrude(Profile::Circle {
+                frame: upright([0.0; 3]),
+                radius: 1.0,
+            })),
+        ),
+        (
+            "extrusion_of_ellipse",
+            on_surface(extrude(Profile::Ellipse {
+                frame: upright([0.0; 3]),
+                semi_axis_1: 2.0,
+                semi_axis_2: 1.0,
+            })),
+        ),
+        (
+            "extrusion_of_nurbs",
+            on_surface(extrude(Profile::Nurbs(cubic()))),
+        ),
+        (
+            "revolution_of_line",
+            on_surface(revolve(Profile::Line {
+                point: [2.0, 0.0, 0.0],
+                direction: [0.0, 0.0, 1.0],
+            })),
+        ),
+        (
+            "revolution_of_circle",
+            on_surface(revolve(Profile::Circle {
+                frame: Frame {
+                    origin: [5.0, 0.0, 0.0],
+                    axis: [0.0, 1.0, 0.0],
+                    ref_dir: [1.0, 0.0, 0.0],
+                },
+                radius: 1.0,
+            })),
+        ),
+        ("nurbs_surface", on_surface(Surface::Nurbs(grid(false)))),
+        (
+            "rational_nurbs_surface",
+            on_surface(Surface::Nurbs(grid(true))),
+        ),
+    ]
+}
+
+/// Part names brep-to-step escapes and step-io writes raw.
+fn name_coverage() -> Vec<(&'static str, Scene)> {
+    vec![
+        (
+            "korean_name",
+            cube("부품 ①", [0.0; 3], 1.0, LineKind::Along),
+        ),
+        (
+            "escaped_name",
+            cube(r"a\b's", [0.0; 3], 1.0, LineKind::Along),
+        ),
+    ]
+}
+
+/// A cubic with one interior knot, from (0,0,0) to (4,0,0).
+pub fn cubic() -> NurbsCurve {
+    NurbsCurve {
+        degree: 3,
+        control_points: vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 2.0, 0.0],
+            [2.0, -1.0, 0.0],
+            [3.0, 1.0, 0.0],
+            [4.0, 0.0, 0.0],
+        ],
+        weights: None,
+        knots: vec![0.0, 0.5, 1.0],
+        multiplicities: vec![4, 1, 4],
+    }
+}
+
+/// A quarter of the unit circle from (1,0,0) to (0,1,0) as a degree-2
+/// B-spline; exactly the arc with weights `[1, 1/sqrt 2, 1]`.
+pub fn quarter_arc(weights: Option<Vec<f64>>) -> NurbsCurve {
+    NurbsCurve {
+        degree: 2,
+        control_points: vec![[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+        weights,
+        knots: vec![0.0, 1.0],
+        multiplicities: vec![3, 3],
+    }
+}
+
+/// A 3 x 4 control grid of degree 2 x 3, rational with one weight off 1
+/// or not.
+pub fn grid(rational: bool) -> NurbsSurface {
+    let control_points: Vec<Vec<[f64; 3]>> = (0..3u8)
+        .map(|i| {
+            (0..4u8)
+                .map(|j| [f64::from(i), f64::from(j), f64::from((i + j) % 2) * 0.5])
+                .collect()
+        })
+        .collect();
+    let weights = rational.then(|| {
+        (0..3)
+            .map(|i| {
+                (0..4)
+                    .map(|j| if (i, j) == (1, 1) { 0.8 } else { 1.0 })
+                    .collect()
+            })
+            .collect()
+    });
+    NurbsSurface {
+        degree_u: 2,
+        degree_v: 3,
+        control_points,
+        weights,
+        knots_u: vec![0.0, 1.0],
+        multiplicities_u: vec![3, 3],
+        knots_v: vec![0.0, 1.0],
+        multiplicities_v: vec![4, 4],
+    }
+}
+
+/// One face as a one-part "solid" — an open shell, for coverage only.
+fn single_face(
+    vertices: Vec<[f64; 3]>,
+    edges: Vec<EdgeSpec>,
+    surface: Surface,
+    bound: Vec<(usize, bool)>,
+) -> Scene {
+    Scene {
+        parts: vec![PartSpec {
+            name: "coverage".to_owned(),
+            solids: vec![SolidSpec::plain(vec![0])],
+        }],
+        vertices,
+        edges,
+        faces: vec![FaceSpec {
+            surface,
+            same_sense: true,
+            bounds: vec![BoundSpec {
+                outer: true,
+                edges: bound,
+            }],
+        }],
+    }
+}
+
+/// A plane face bounded by one closed edge along `curve`, from and to `at`.
+fn on_plane_closed(curve: Curve, at: [f64; 3]) -> Scene {
+    single_face(
+        vec![at],
+        vec![EdgeSpec {
+            start: 0,
+            end: 0,
+            curve,
+        }],
+        Surface::Plane(upright([0.0; 3])),
+        vec![(0, true)],
+    )
+}
+
+/// A plane face bounded by an open edge along `curve` — from its first
+/// control point to its last — and a straight edge back.
+fn on_plane_open(curve: Curve) -> Scene {
+    let ends = match &curve {
+        Curve::Polyline(points) => (points[0], points[points.len() - 1]),
+        Curve::Nurbs(n) => (
+            n.control_points[0],
+            n.control_points[n.control_points.len() - 1],
+        ),
+        other => panic!("no ends known for {other:?}"),
+    };
+    single_face(
+        vec![ends.0, ends.1],
+        vec![
+            EdgeSpec {
+                start: 0,
+                end: 1,
+                curve,
+            },
+            EdgeSpec {
+                start: 0,
+                end: 1,
+                curve: Curve::Line,
+            },
+        ],
+        Surface::Plane(upright([0.0; 3])),
+        vec![(0, true), (1, false)],
+    )
+}
+
+/// A face on `surface` bounded by the unit circle about the z axis.
+fn on_surface(surface: Surface) -> Scene {
+    single_face(
+        vec![[1.0, 0.0, 0.0]],
+        vec![EdgeSpec {
+            start: 0,
+            end: 0,
+            curve: Curve::Circle {
+                frame: upright([0.0; 3]),
+                radius: 1.0,
+            },
+        }],
+        surface,
+        vec![(0, true)],
+    )
 }

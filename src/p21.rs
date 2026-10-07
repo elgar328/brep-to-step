@@ -1,11 +1,6 @@
 //! Part 21 encoding: entity ids, and the literal forms of REAL, STRING,
 //! enumeration, list, and reference values.
 
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by the writer as it is built up")
-)]
-
 use std::fmt::Write as _;
 
 /// Reference to an entity already written (`#n`). The field is private to
