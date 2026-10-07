@@ -34,9 +34,8 @@ const PREPROCESSOR: &str = concat!("brep-to-step ", env!("CARGO_PKG_VERSION"));
 /// Part 21 types every header string as `STRING(256)`.
 const MAX_CHARS: usize = 256;
 
-/// The whole file: the HEADER section built from `header`, then `data_body`
-/// as the DATA section.
-pub(crate) fn write_file(header: &Header, data_body: &str) -> Result<String, Error> {
+/// Every string must fit Part 21's `STRING(256)`.
+pub(crate) fn check(header: &Header) -> Result<(), Error> {
     check_length("file_name", &header.file_name)?;
     check_length("description", &header.description)?;
     check_length("timestamp", &header.timestamp)?;
@@ -47,8 +46,12 @@ pub(crate) fn write_file(header: &Header, data_body: &str) -> Result<String, Err
         check_length("organizations", organization)?;
     }
     check_length("originating_system", &header.originating_system)?;
-    check_length("authorisation", &header.authorisation)?;
+    check_length("authorisation", &header.authorisation)
+}
 
+/// The whole file: the HEADER section built from `header` (already
+/// [`check`]ed), then `data_body` as the DATA section.
+pub(crate) fn write_file(header: &Header, data_body: &str) -> String {
     let mut out = String::with_capacity(data_body.len() + 1024);
     out.push_str("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((");
     write_str(&mut out, &header.description);
@@ -73,7 +76,7 @@ pub(crate) fn write_file(header: &Header, data_body: &str) -> Result<String, Err
     out.push_str("));\nENDSEC;\nDATA;\n");
     out.push_str(data_body);
     out.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
-    Ok(out)
+    out
 }
 
 fn check_length(field: &'static str, s: &str) -> Result<(), Error> {

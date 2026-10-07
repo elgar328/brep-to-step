@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 
 /// Reference to an entity already written (`#n`). The field is private to
 /// this module, so only [`Data`] can mint one.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct Ref(u64);
 
 /// One attribute value. Borrows its data — call sites already hold the slices.

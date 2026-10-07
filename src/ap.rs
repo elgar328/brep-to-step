@@ -27,3 +27,9 @@ pub(crate) const PRODUCT_CONTEXT_DISCIPLINE: &str = "mechanical";
 pub(crate) const PRODUCT_DEFINITION_CONTEXT_NAME: &str = "part definition";
 /// `PRODUCT_DEFINITION_CONTEXT.life_cycle_stage`.
 pub(crate) const PRODUCT_DEFINITION_CONTEXT_STAGE: &str = "design";
+
+/// `PRODUCT_DEFINITION.id`.
+pub(crate) const PRODUCT_DEFINITION_ID: &str = "design";
+
+/// `PRODUCT_RELATED_PRODUCT_CATEGORY.name`, the category of every part.
+pub(crate) const PRODUCT_CATEGORY: &str = "part";

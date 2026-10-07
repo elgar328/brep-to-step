@@ -13,6 +13,32 @@ pub enum Error {
         what: &'static str,
         value: f64,
     },
+    /// A direction that is zero.
+    ZeroVector {
+        /// Which input the direction was given for.
+        what: &'static str,
+    },
+    /// A frame whose axis and reference direction are parallel.
+    ParallelAxes {
+        /// Which input the frame was given for.
+        what: &'static str,
+    },
+    /// A straight edge whose two vertices are at the same point.
+    ZeroLengthLine,
+    /// A list that must not be empty.
+    Empty {
+        /// Which list.
+        what: &'static str,
+    },
+    /// A face with more than one outer bound.
+    MultipleOuterBounds,
+    /// A handle made by a different [`StepWriter`](crate::StepWriter).
+    ForeignHandle,
+    /// A part with no solid in it.
+    EmptyPart {
+        /// The part's name.
+        name: String,
+    },
     /// A HEADER string longer than the 256 characters Part 21 allows.
     HeaderTooLong {
         /// The [`Header`](crate::Header) field.
@@ -26,6 +52,17 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidNumber { what, value } => write!(f, "invalid {what}: {value}"),
+            Self::ZeroVector { what } => write!(f, "zero direction in {what}"),
+            Self::ParallelAxes { what } => {
+                write!(f, "axis and reference direction are parallel in {what}")
+            }
+            Self::ZeroLengthLine => {
+                f.write_str("straight edge with both vertices at the same point")
+            }
+            Self::Empty { what } => write!(f, "no {what}"),
+            Self::MultipleOuterBounds => f.write_str("face with more than one outer bound"),
+            Self::ForeignHandle => f.write_str("handle from a different writer"),
+            Self::EmptyPart { name } => write!(f, "part {name:?} has no solid"),
             Self::HeaderTooLong { field, chars } => write!(
                 f,
                 "header {field} is {chars} characters long; Part 21 allows 256"

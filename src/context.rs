@@ -37,7 +37,6 @@ pub enum LengthUnit {
 
 /// The skeleton entities later entities refer to.
 #[derive(Debug)]
-#[expect(dead_code, reason = "read by the part chain (step 3)")]
 pub(crate) struct Skeleton {
     /// The geometric representation context, with units and uncertainty.
     pub(crate) ctx: Ref,
