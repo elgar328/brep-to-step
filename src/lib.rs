@@ -9,6 +9,7 @@
 //! The API is kernel-neutral: a kernel-specific adapter translates its own
 //! types into the inputs here.
 
+mod ap;
 mod context;
 mod error;
 mod geometry;
