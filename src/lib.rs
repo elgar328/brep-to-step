@@ -17,3 +17,9 @@ mod header;
 mod p21;
 mod product;
 mod topology;
+mod writer;
+
+pub use context::{LengthUnit, Units};
+pub use error::Error;
+pub use header::Header;
+pub use writer::StepWriter;

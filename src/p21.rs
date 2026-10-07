@@ -39,6 +39,7 @@ pub(crate) enum Param<'a> {
 
 /// The DATA section being written. Ids are assigned in creation order from
 /// `#1`, so every reference points back to an entity already written.
+#[derive(Debug)]
 pub(crate) struct Data {
     next: u64,
     body: String,
