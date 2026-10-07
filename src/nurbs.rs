@@ -6,16 +6,17 @@ use crate::p21::{Data, Param, Ref};
 
 /// A B-spline curve, rational or not, in STEP's own form.
 ///
-/// The knot vector is given as its distinct values with the multiplicity of
-/// each, as STEP writes it: the expanded vector `[0, 0, 0, 0, 0.5, 1, 1, 1,
-/// 1]` is `knots: [0.0, 0.5, 1.0]` with `multiplicities: [4, 1, 4]`. The knots
-/// must increase, each multiplicity be at least 1 — at most `degree + 1` at
-/// the ends and `degree` inside — and the multiplicities sum to the number of
-/// control points plus `degree + 1`.
+/// The knot vector is given as STEP writes it: its distinct values, with the
+/// multiplicity of each. The expanded vector `[0, 0, 0, 0, 0.5, 1, 1, 1, 1]`,
+/// for example, is `knots: [0.0, 0.5, 1.0]` with `multiplicities: [4, 1, 4]`.
+/// The knots must strictly increase. Each multiplicity must be at least 1,
+/// and at most `degree + 1` at the ends or `degree` in between. The
+/// multiplicities must sum to the number of control points plus
+/// `degree + 1`.
 ///
-/// `weights` says whether the curve is rational: `None` writes a plain
-/// B-spline, `Some` (one positive weight per control point) a rational one,
-/// even if every weight is 1.
+/// `weights` decides whether the curve is rational. `None` writes a plain
+/// B-spline; `Some`, with one positive weight per control point, writes a
+/// rational one, even if every weight is 1.
 ///
 /// ```
 /// use brep_to_step::NurbsCurve;
@@ -47,9 +48,12 @@ use crate::p21::{Data, Param, Ref};
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct NurbsCurve {
+    /// The polynomial degree; at least 1.
     pub degree: usize,
+    /// The control points; at least `degree + 1`.
     pub control_points: Vec<[f64; 3]>,
-    /// One per control point; `None` for a non-rational curve.
+    /// One positive weight per control point, or `None` for a non-rational
+    /// curve.
     pub weights: Option<Vec<f64>>,
     /// The distinct knot values, increasing.
     pub knots: Vec<f64>,
@@ -57,20 +61,29 @@ pub struct NurbsCurve {
     pub multiplicities: Vec<usize>,
 }
 
-/// A B-spline surface, rational or not, in STEP's own form — see
-/// [`NurbsCurve`]; each direction follows the same rules. The control point
-/// grid (and the weight grid) is indexed `[u][v]`: one row per u, every row
-/// the same length.
+/// A B-spline surface, rational or not, in STEP's own form. Each parameter
+/// direction follows the rules of [`NurbsCurve`]. The control points (and the
+/// weights) form a grid indexed `[u][v]`: one row per u index, every row the
+/// same length.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NurbsSurface {
+    /// The polynomial degree in u; at least 1.
     pub degree_u: usize,
+    /// The polynomial degree in v; at least 1.
     pub degree_v: usize,
+    /// The control points, one row per u: at least `degree_u + 1` rows of
+    /// at least `degree_v + 1` points each, every row the same length.
     pub control_points: Vec<Vec<[f64; 3]>>,
-    /// Shaped like `control_points`; `None` for a non-rational surface.
+    /// One positive weight per control point, in the same grid, or `None`
+    /// for a non-rational surface.
     pub weights: Option<Vec<Vec<f64>>>,
+    /// The distinct u knot values, increasing.
     pub knots_u: Vec<f64>,
+    /// How many times each u knot repeats.
     pub multiplicities_u: Vec<usize>,
+    /// The distinct v knot values, increasing.
     pub knots_v: Vec<f64>,
+    /// How many times each v knot repeats.
     pub multiplicities_v: Vec<usize>,
 }
 

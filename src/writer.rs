@@ -15,15 +15,15 @@ static NEXT_WRITER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes one STEP AP242 file.
 ///
-/// [`new`](Self::new) lays down the skeleton every file carries; shapes are
-/// built bottom up — [`vertex`](Self::vertex), [`edge`](Self::edge),
-/// [`face`](Self::face), then [`solid`](Self::solid) into a
-/// [`part`](Self::part) — and [`finish`](Self::finish) adds the header and
-/// returns the file's text.
+/// [`new`](Self::new) writes the structure every file needs. Shapes are then
+/// built from the bottom up: [`vertex`](Self::vertex), [`edge`](Self::edge),
+/// [`face`](Self::face), and finally [`solid`](Self::solid), which adds the
+/// solid to a [`part`](Self::part). [`finish`](Self::finish) adds the header
+/// and returns the file's text.
 ///
-/// Each call writes new entities: a vertex or edge shared by several faces
-/// is written once and its handle passed to each of them. A call that
-/// returns an error writes nothing.
+/// Each call writes new entities, so write a vertex or edge shared by several
+/// faces once and pass its handle to each face. A call that returns an error
+/// writes nothing.
 #[derive(Debug)]
 pub struct StepWriter {
     id: u64,
@@ -53,7 +53,7 @@ impl StepWriter {
         })
     }
 
-    /// Add a part — one product, named `name` — to hold solids.
+    /// Add a part named `name`: one product that will hold solids.
     pub fn part(&mut self, name: &str) -> Part {
         let pending = product::write_part(&mut self.data, &self.skeleton, name);
         self.parts.push(pending);
@@ -103,7 +103,8 @@ impl StepWriter {
     }
 
     /// Add a face on `surface`, bounded by `bounds`. `same_sense` is `true`
-    /// when the face's outward normal is the surface's own normal.
+    /// if the face's outward normal points the same way as the surface's
+    /// normal.
     ///
     /// # Errors
     ///
@@ -168,9 +169,9 @@ impl StepWriter {
         Ok(())
     }
 
-    /// Add a solid with internal voids to `part`: `outer` closes into its
-    /// outer shell and each group in `voids` into a cavity shell, oriented
-    /// as `normals` declares.
+    /// Add a solid with internal voids to `part`. `outer` forms its outer
+    /// shell and each group in `voids` a cavity shell, oriented as `normals`
+    /// declares.
     ///
     /// # Errors
     ///

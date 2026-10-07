@@ -6,9 +6,9 @@ use crate::context::Skeleton;
 use crate::geometry::{Frame, write_placement};
 use crate::p21::{Data, Param, Ref};
 
-/// A part written by [`StepWriter::part`](crate::StepWriter::part): one
-/// product, holding the solids added to it. Valid only with the writer that
-/// made it.
+/// A part made by [`StepWriter::part`](crate::StepWriter::part): one product
+/// that holds the solids added to it. Valid only with the writer that made
+/// it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Part {
     pub(crate) writer: u64,

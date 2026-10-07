@@ -6,12 +6,13 @@ use crate::ap;
 use crate::error::Error;
 use crate::p21::{Data, Param, Ref};
 
-/// The file's units: the length unit coordinates are written in, and the
-/// modelling uncertainty in that unit. Angles are always radians.
+/// The file's units: the length unit, and the modelling uncertainty in that
+/// unit. Angles are always in radians.
 #[derive(Debug, Clone, Copy)]
 pub struct Units {
+    /// The unit of every length: coordinates, radii, and the uncertainty.
     pub length: LengthUnit,
-    /// The length below which two points are the same point
+    /// The distance below which two points count as the same point
     /// (`distance_accuracy_value`), in `length` units. Must be finite and
     /// positive.
     pub uncertainty: f64,
@@ -27,11 +28,13 @@ impl Default for Units {
     }
 }
 
-/// The SI length unit coordinates are written in.
+/// The SI unit lengths are written in.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LengthUnit {
+    /// Millimetres (`SI_UNIT(.MILLI.,.METRE.)`), the default.
     #[default]
     Millimetre,
+    /// Metres (`SI_UNIT($,.METRE.)`).
     Metre,
 }
 

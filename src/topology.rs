@@ -27,8 +27,8 @@ pub struct Face {
     pub(crate) entity: Ref,
 }
 
-/// One boundary loop of a face: its edges in order, each with `true` if the
-/// loop runs along the edge from its start vertex to its end vertex.
+/// One boundary loop of a face: its edges in order, each paired with `true`
+/// if the loop runs along the edge from its start vertex to its end vertex.
 #[derive(Debug, Clone)]
 pub struct Bound {
     pub(crate) edges: Vec<(Edge, bool)>,
@@ -52,23 +52,24 @@ impl Bound {
     }
 }
 
-/// Which way the face normals of a solid's void shells point, so the
-/// writer can orient each cavity without evaluating geometry.
+/// Which way the face normals of a solid's void shells point. Declaring it
+/// lets the writer orient each cavity without evaluating geometry.
 ///
-/// STEP orients every bounding shell with its face normals pointing away
-/// from the material: outward into free space for the outer shell, and into
-/// the empty cavity for a void. Look along a cavity wall's normal: into the
-/// empty hole means [`AwayFromMaterial`](Self::AwayFromMaterial), into the
-/// surrounding solid means [`TowardMaterial`](Self::TowardMaterial). The
-/// wrong choice turns the void inside out.
+/// STEP orients every bounding shell so that its face normals point away
+/// from the material: out into free space for the outer shell, and into the
+/// empty cavity for a void. Follow the normal of a cavity wall: if it points
+/// into the empty cavity, choose [`AwayFromMaterial`](Self::AwayFromMaterial);
+/// if it points into the surrounding solid, choose
+/// [`TowardMaterial`](Self::TowardMaterial). The wrong choice turns the void
+/// inside out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoidShellNormals {
-    /// The faces already point into the cavity, by the same rule as the
-    /// outer shell — what most kernels produce for a cavity (a reversed
-    /// shell). Written as authored.
+    /// The faces already point into the cavity, following the same rule as
+    /// the outer shell. Most kernels produce cavities this way, as a reversed
+    /// shell. Written as given.
     AwayFromMaterial,
-    /// The faces point into the surrounding material — a cavity wound like
-    /// an ordinary outward-facing solid. Written reversed.
+    /// The faces point into the surrounding material, as if the cavity were
+    /// an ordinary solid facing outward. Written reversed.
     TowardMaterial,
 }
 

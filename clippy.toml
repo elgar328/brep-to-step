@@ -1,0 +1,2 @@
+# Product names the docs mention, not code identifiers; ".." keeps the defaults.
+doc-valid-idents = ["FreeCAD", ".."]

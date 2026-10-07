@@ -2,18 +2,19 @@
 
 use std::fmt;
 
-/// Why a value cannot be written.
+/// Why a [`StepWriter`](crate::StepWriter) call failed.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum Error {
-    /// A number the file cannot hold or the entity forbids: NaN, an
-    /// infinity, or a value out of the entity's range.
+    /// A number that cannot be written: NaN, an infinity, or a value outside
+    /// the range its entity allows.
     InvalidNumber {
         /// Which input the number was given for.
         what: &'static str,
+        /// The number itself.
         value: f64,
     },
-    /// A direction that is zero.
+    /// A direction of length zero.
     ZeroVector {
         /// Which input the direction was given for.
         what: &'static str,
@@ -30,9 +31,9 @@ pub enum Error {
         /// Which list.
         what: &'static str,
     },
-    /// A NURBS curve or surface breaking one of STEP's B-spline rules.
+    /// A NURBS curve or surface that breaks one of STEP's B-spline rules.
     InvalidNurbs {
-        /// Which rule.
+        /// The rule it breaks.
         reason: &'static str,
     },
     /// A face with more than one outer bound.
@@ -46,7 +47,7 @@ pub enum Error {
     },
     /// A HEADER string longer than the 256 characters Part 21 allows.
     HeaderTooLong {
-        /// The [`Header`](crate::Header) field.
+        /// The [`Header`](crate::Header) field that is too long.
         field: &'static str,
         /// Its length in characters.
         chars: usize,

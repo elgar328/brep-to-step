@@ -9,13 +9,16 @@ use crate::p21::{Data, Param, Ref};
 /// A right-handed placement: an origin plus the local Z (`axis`) and local X
 /// (`ref_dir`) directions — STEP's `AXIS2_PLACEMENT_3D`.
 ///
-/// The directions are written as given; they need not be unit length or
+/// The directions are written as given. They need not be unit length or
 /// exactly perpendicular (STEP projects `ref_dir` onto the plane normal to
-/// `axis`), but neither may be zero and they may not be parallel.
+/// `axis`), but neither may be zero and they must not be parallel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Frame {
+    /// The local origin.
     pub origin: [f64; 3],
+    /// The local Z direction.
     pub axis: [f64; 3],
+    /// The local X direction.
     pub ref_dir: [f64; 3],
 }
 
@@ -25,58 +28,72 @@ pub struct Frame {
 pub enum Curve {
     /// A straight edge whose direction is computed from its two vertices.
     Line,
-    /// A straight edge along a direction the caller already holds, written
-    /// bit for bit — a kernel that knows the exact direction keeps it rather
-    /// than the one two rounded vertex positions imply. A direction pointing
-    /// from the end vertex back to the start is negated exactly, so the line
-    /// runs with the edge. Keeping it parallel to the edge is the caller's
-    /// part.
+    /// A straight edge along a direction the caller supplies, written bit
+    /// for bit. A kernel that knows the exact direction keeps it, instead of
+    /// the one implied by two rounded vertex positions. If the direction
+    /// points from the end vertex back to the start, it is negated exactly so
+    /// that the line runs the same way as the edge. Keeping the direction
+    /// parallel to the edge is up to the caller.
     LineAlong([f64; 3]),
-    /// The circle of `radius` in the frame's XY plane, centred at its
-    /// origin. With equal start and end vertices the edge is the full
-    /// circle; otherwise it is the arc from start to end, counter-clockwise
-    /// about the axis. (A clockwise arc is the same circle with its axis
-    /// negated.)
+    /// A circle of `radius` in the frame's XY plane, centred at the frame's
+    /// origin. If the start and end vertices are the same, the edge is the
+    /// full circle; otherwise it is the arc from start to end, running
+    /// counter-clockwise about the axis. (For a clockwise arc, negate the
+    /// axis.)
     Circle {
+        /// The circle's placement: centre, normal, and where its parameter starts.
         frame: Frame,
+        /// The circle's radius; positive.
         radius: f64,
     },
-    /// The ellipse in the frame's XY plane, centred at its origin, with
-    /// `semi_axis_1` along the reference direction and `semi_axis_2` across
-    /// it. Full or an arc, counter-clockwise about the axis, as
-    /// [`Circle`](Self::Circle).
+    /// An ellipse in the frame's XY plane, centred at the frame's origin,
+    /// with `semi_axis_1` along the reference direction and `semi_axis_2`
+    /// perpendicular to it. As with a [`Circle`](Self::Circle), the edge is
+    /// the full ellipse or a counter-clockwise arc.
     Ellipse {
+        /// The ellipse's placement: centre, normal, and its first axis.
         frame: Frame,
+        /// The semi-axis along the frame's reference direction; positive.
         semi_axis_1: f64,
+        /// The semi-axis across it; positive.
         semi_axis_2: f64,
     },
-    /// The piecewise-linear curve through the points, customarily the first
-    /// and last at the edge's vertices. At least two points.
+    /// A piecewise-linear curve through at least two points. The first and
+    /// last points usually sit at the edge's vertices.
     Polyline(Vec<[f64; 3]>),
+    /// A B-spline curve, rational or not.
     Nurbs(NurbsCurve),
 }
 
-/// A curve with no vertices: the swept curve of a
+/// A curve without vertices: the profile swept by a
 /// [`Surface::LinearExtrusion`] or [`Surface::Revolution`].
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Profile {
-    /// The infinite line through `point` along `direction`.
+    /// An infinite line through `point` along `direction`.
     Line {
+        /// A point the line passes through.
         point: [f64; 3],
+        /// The line's direction; not zero.
         direction: [f64; 3],
     },
-    /// A full circle, as [`Curve::Circle`].
+    /// A full circle, placed as in [`Curve::Circle`].
     Circle {
+        /// The circle's placement: centre, normal, and where its parameter starts.
         frame: Frame,
+        /// The circle's radius; positive.
         radius: f64,
     },
-    /// A full ellipse, as [`Curve::Ellipse`].
+    /// A full ellipse, placed as in [`Curve::Ellipse`].
     Ellipse {
+        /// The ellipse's placement: centre, normal, and its first axis.
         frame: Frame,
+        /// The semi-axis along the frame's reference direction; positive.
         semi_axis_1: f64,
+        /// The semi-axis across it; positive.
         semi_axis_2: f64,
     },
+    /// A B-spline curve, rational or not.
     Nurbs(NurbsCurve),
 }
 
@@ -84,46 +101,65 @@ pub enum Profile {
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Surface {
-    /// The plane through the frame's origin, normal to its axis.
+    /// A plane through the frame's origin, normal to its axis.
     Plane(Frame),
-    /// The cylinder of `radius` around the line through the frame's origin
-    /// along its axis.
+    /// A cylinder of `radius` around the frame's axis, through its origin.
     Cylinder {
+        /// The cylinder's placement: a point on its axis, the axis, and where
+        /// its angle starts.
         frame: Frame,
+        /// The cylinder's radius; positive.
         radius: f64,
     },
-    /// The sphere of `radius` centred at the frame's origin.
+    /// A sphere of `radius` centred at the frame's origin.
     Sphere {
+        /// The sphere's placement: its centre and the axes its angles are
+        /// measured from.
         frame: Frame,
+        /// The sphere's radius; positive.
         radius: f64,
     },
-    /// The torus around the frame's axis: its tube, of `minor_radius`,
-    /// centred on the circle of `major_radius` in the frame's XY plane.
+    /// A torus around the frame's axis: a tube of `minor_radius` whose centre
+    /// follows the circle of `major_radius` in the frame's XY plane.
     Torus {
+        /// The torus's placement: its centre, its axis, and where its angle starts.
         frame: Frame,
+        /// The radius of the circle the tube follows; positive.
         major_radius: f64,
+        /// The radius of the tube; positive.
         minor_radius: f64,
     },
-    /// The cone around the frame's axis, of `radius` in the frame's XY
-    /// plane, its side at `semi_angle` (radians, between 0 and π/2) to the
-    /// axis. A `radius` of 0 puts the apex at the origin.
+    /// A cone around the frame's axis, with `radius` in the frame's XY plane
+    /// and its side at `semi_angle` to the axis. A `radius` of 0 puts the
+    /// apex at the origin.
     Cone {
+        /// The cone's placement: a point on its axis, the axis, and where its
+        /// angle starts.
         frame: Frame,
+        /// The radius in the frame's XY plane; zero or more.
         radius: f64,
+        /// The angle between the side and the axis, in radians; strictly
+        /// between 0 and π/2.
         semi_angle: f64,
     },
-    /// `profile` swept along `sweep` — its direction and length.
+    /// The surface swept out by moving `profile` along `sweep`.
     LinearExtrusion {
+        /// The curve being swept.
         profile: Profile,
+        /// The sweep's direction and length; not zero.
         sweep: [f64; 3],
     },
-    /// `profile` revolved about the axis through `axis_origin` along
-    /// `axis_direction`.
+    /// The surface swept out by revolving `profile` about the axis through
+    /// `axis_origin` along `axis_direction`.
     Revolution {
+        /// The curve being revolved.
         profile: Profile,
+        /// A point on the axis of revolution.
         axis_origin: [f64; 3],
+        /// The axis's direction; not zero.
         axis_direction: [f64; 3],
     },
+    /// A B-spline surface, rational or not.
     Nurbs(NurbsSurface),
 }
 

@@ -6,23 +6,23 @@ use crate::p21::write_str;
 
 /// The HEADER section's free-text fields. Every field may be left empty.
 ///
-/// Each string, and each entry of `authors` and `organizations`, may be at
-/// most 256 characters long — the limit Part 21 sets on header strings.
+/// Each string, including each entry of `authors` and `organizations`, may
+/// be at most 256 characters long, the limit Part 21 sets for header strings.
 #[derive(Debug, Clone, Default)]
 pub struct Header {
-    /// `FILE_NAME.name` — customarily the file's own name.
+    /// `FILE_NAME.name` — usually the file's own name.
     pub file_name: String,
     /// `FILE_DESCRIPTION.description`.
     pub description: String,
-    /// `FILE_NAME.time_stamp`, written as given — customarily ISO 8601
-    /// (`2026-10-07T12:00:00`). The writer never reads a clock, so the same
-    /// input always gives the same file.
+    /// `FILE_NAME.time_stamp`, written as given — usually ISO 8601
+    /// (`2026-10-07T12:00:00`).
     pub timestamp: String,
     /// `FILE_NAME.author`.
     pub authors: Vec<String>,
     /// `FILE_NAME.organization`.
     pub organizations: Vec<String>,
-    /// `FILE_NAME.originating_system` — the application or kernel exporting.
+    /// `FILE_NAME.originating_system` — the application or kernel doing the
+    /// export.
     pub originating_system: String,
     /// `FILE_NAME.authorization`.
     pub authorisation: String,

@@ -3,7 +3,7 @@ name = "brep-to-step"
 version = "0.1.0-dev"
 edition = "2024"
 rust-version = "1.85"
-description = "Write B-rep solids from a CAD kernel as STEP AP242 files."
+description = "A minimal STEP AP242 exporter for B-rep CAD kernels."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/elgar328/brep-to-step"
 readme = "README.md"
@@ -20,6 +20,8 @@ step-io = "0.2.5"
 
 [lints.rust]
 unsafe_code = "deny"
+# Every public item is documented; CI turns this warning into an error.
+missing_docs = "warn"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

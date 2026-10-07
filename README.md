@@ -1,18 +1,33 @@
 # brep-to-step
 
-Write B-rep solids from a CAD kernel as STEP AP242 (Edition 2) files.
+A minimal STEP AP242 exporter for B-rep CAD kernels.
 
-- **Write-only, shape-only.** Geometry (points, directions, placements,
-  curves, surfaces), topology (vertices through solids, including solids with
-  voids), and the minimal product, unit, and context structure a valid AP242
-  file needs.
-- **Kernel-neutral.** A small adapter in the kernel translates its own types
-  into the inputs here.
-- **Out of scope, permanently:** colours, names and metadata, assemblies,
-  meshes, and PMI. Those belong to a CAD application, not a kernel.
+> ⚠️ **Experimental** — early stage; expect breaking API changes.
+
+## Features
+
+- **Write-only, shape-only** — writes geometry and topology, plus only the
+  product, unit, and context structure a valid AP242 edition 2 file
+  requires.
+- **Kernel-neutral** — takes plain inputs (`[f64; 3]`, frames, curves,
+  surfaces), so a small adapter is all a kernel needs.
+- **Exact** — every `f64` is written in the shortest form that reads back to
+  the same bits; nothing is normalized or recomputed.
+- **Fails cleanly** — input is checked before anything is written, so a call
+  that returns an error leaves the file untouched.
+- **Reproducible** — the same input always produces the same file.
 - **No runtime dependencies.**
 
-Status: early development; the API is not settled yet.
+See the [documentation](https://docs.rs/brep-to-step) for usage and an
+example.
+
+## brep-to-step or step-io?
+
+[step-io](https://crates.io/crates/step-io) is a full STEP library: it reads
+all mainstream APs and writes AP242, including colours, assemblies, meshes,
+and PMI. brep-to-step only writes a kernel's shapes, which keeps it small and
+free of dependencies. Use brep-to-step to export a kernel's B-rep; use step-io
+to read STEP, or to write more than shapes.
 
 ## License
 
