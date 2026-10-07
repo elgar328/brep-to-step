@@ -29,6 +29,7 @@ impl Default for Units {
 }
 
 /// The SI unit lengths are written in.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LengthUnit {
     /// Millimetres (`SI_UNIT(.MILLI.,.METRE.)`), the default.

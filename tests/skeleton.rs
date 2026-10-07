@@ -30,6 +30,7 @@ fn step_io(units: Units) -> String {
         length: match units.length {
             LengthUnit::Millimetre => StepIoLength::Millimetre,
             LengthUnit::Metre => StepIoLength::Metre,
+            other => panic!("no step-io unit for {other:?}"),
         },
         uncertainty: units.uncertainty,
     })
