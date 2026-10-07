@@ -1,0 +1,26 @@
+[package]
+name = "brep-to-step"
+version = "0.1.0-dev"
+edition = "2024"
+rust-version = "1.85"
+description = "Write B-rep solids from a CAD kernel as STEP AP242 files."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/elgar328/brep-to-step"
+readme = "README.md"
+keywords = ["step", "iso10303", "cad", "brep", "ap242"]
+categories = ["encoding", "science"]
+exclude = [".github/", ".claude/", "CLAUDE.md"]
+
+[dependencies]
+
+[dev-dependencies]
+# The oracle: tests author the same shape through step-io's `StepBuilder` and
+# compare, and read every output back through step-io's strict reader.
+step-io = "0.2.5"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
