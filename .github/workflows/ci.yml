@@ -21,3 +21,11 @@ jobs:
       - run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: "-D warnings"
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      # The library only: step-io, the tests' oracle, does not build on 1.85.
+      - run: cargo check --locked
