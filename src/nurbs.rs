@@ -156,7 +156,8 @@ fn check_knots(
     if degree < 1 {
         return Err(invalid(rules.degree));
     }
-    if points < degree + 1 {
+    // `points < degree + 1`, without overflow; past here `degree + 1` fits.
+    if points <= degree {
         return Err(invalid(rules.points));
     }
     if knots.len() != multiplicities.len() {

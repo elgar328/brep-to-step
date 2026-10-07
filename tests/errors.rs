@@ -141,6 +141,113 @@ fn zero_length_lines() {
     }
 }
 
+/// Distinct vertices so close together, or so far apart, that the line's
+/// length underflows to 0 or overflows to infinity: rejected, leaving no
+/// trace. Nearer 1 the same arithmetic works and the edge is written.
+#[test]
+fn unrepresentable_line_lengths() {
+    let vertices_only = |a: [f64; 3], b: [f64; 3]| {
+        let mut w = writer();
+        w.vertex(a).expect("start");
+        w.vertex(b).expect("end");
+        w.finish(&header()).expect("finish")
+    };
+    for (a, b) in [
+        ([0.0; 3], [1e-200, 0.0, 0.0]),
+        ([-1e308, 0.0, 0.0], [1e308, 0.0, 0.0]),
+    ] {
+        let mut w = writer();
+        let start = w.vertex(a).expect("start");
+        let end = w.vertex(b).expect("end");
+        assert!(invalid_number(
+            &w.edge(start, end, Curve::Line).map(|_| ()),
+            "line length"
+        ));
+        assert_eq!(w.finish(&header()).expect("finish"), vertices_only(a, b));
+    }
+    let mut w = writer();
+    let start = w.vertex([0.0; 3]).expect("start");
+    let end = w.vertex([1e-100, 0.0, 0.0]).expect("end");
+    assert!(w.edge(start, end, Curve::Line).is_ok());
+}
+
+/// Deterministic xorshift64, so a failure reproduces.
+struct XorShift(u64);
+
+impl XorShift {
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x
+    }
+
+    /// Alternately an arbitrary finite bit pattern — subnormals and values
+    /// near `f64::MAX` included — and a coordinate-like value.
+    fn finite(&mut self) -> f64 {
+        loop {
+            let bits = self.next();
+            let v = if bits & 1 == 0 {
+                f64::from_bits(bits)
+            } else {
+                #[allow(clippy::cast_precision_loss)] // below 2^21, exact
+                let n = (bits >> 43) as f64;
+                n / 1000.0 - 1000.0
+            };
+            if v.is_finite() {
+                return v;
+            }
+        }
+    }
+
+    fn point(&mut self) -> [f64; 3] {
+        [self.finite(), self.finite(), self.finite()]
+    }
+}
+
+/// Straight edges and extrusions from arbitrary finite values, tiny and huge
+/// alike: each call is accepted or rejected but never panics, and every REAL
+/// the file holds is one Part 21 can read.
+#[test]
+fn extreme_values_never_panic() {
+    const CALLS: usize = 2000;
+    let mut rng = XorShift(0x9E37_79B9_7F4A_7C15);
+    let (mut w, h) = with_cube();
+    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let (mut lines, mut sweeps) = (0, 0);
+    for _ in 0..CALLS {
+        let start = w.vertex(rng.point()).expect("finite vertex");
+        let end = w.vertex(rng.point()).expect("finite vertex");
+        lines += usize::from(w.edge(start, end, Curve::Line).is_ok());
+        let extrusion = Surface::LinearExtrusion {
+            profile: Profile::Line {
+                point: [0.0; 3],
+                direction: [1.0, 0.0, 0.0],
+            },
+            sweep: rng.point(),
+        };
+        sweeps += usize::from(
+            w.face(extrusion, true, std::slice::from_ref(&bound))
+                .is_ok(),
+        );
+    }
+    // Both outcomes occur, so the run exercises the checks and the writes.
+    assert!(
+        0 < lines && lines < CALLS,
+        "{lines} of {CALLS} lines written"
+    );
+    assert!(
+        0 < sweeps && sweeps < CALLS,
+        "{sweeps} of {CALLS} sweeps written"
+    );
+    let text = w.finish(&header()).expect("finish");
+    if let Err(e) = step_io::parser::parse(&text) {
+        panic!("output does not parse: {e}");
+    }
+}
+
 #[test]
 fn empty_lists() {
     let (mut w, h) = with_cube();
@@ -342,14 +449,16 @@ fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
         )
         .is_err()
     );
-    assert!(
-        w.face(
-            bad_extrusion(Profile::Nurbs(cubic()), [0.0; 3]),
-            true,
-            std::slice::from_ref(&bound)
-        )
-        .is_err()
-    );
+    for sweep in [[0.0; 3], [0.0, 1e-200, 0.0]] {
+        assert!(
+            w.face(
+                bad_extrusion(Profile::Nurbs(cubic()), sweep),
+                true,
+                std::slice::from_ref(&bound)
+            )
+            .is_err()
+        );
+    }
 }
 
 #[test]
@@ -619,6 +728,15 @@ fn swept_surface_directions() {
             what: "profile line"
         })
     ));
+    for sweep in [[0.0, 1e-200, 0.0], [1e200, 1e200, 0.0]] {
+        assert!(invalid_number(
+            &face_on(Surface::LinearExtrusion {
+                profile: profile(),
+                sweep
+            }),
+            "extrusion sweep length"
+        ));
+    }
 }
 
 /// A change that breaks one NURBS curve rule.
@@ -641,11 +759,16 @@ fn nurbs_reason(result: Result<(), Error>) -> &'static str {
 #[test]
 fn nurbs_curve_rules() {
     assert!(nurbs_curve_error(|_| {}).is_ok());
-    let cases: [(&str, CurveEdit); 10] = [
+    let cases: [(&str, CurveEdit); 11] = [
         ("degree must be at least 1", Box::new(|c| c.degree = 0)),
         (
             "needs at least degree + 1 control points",
             Box::new(|c| c.control_points.truncate(3)),
+        ),
+        // `degree + 1` itself would overflow.
+        (
+            "needs at least degree + 1 control points",
+            Box::new(|c| c.degree = usize::MAX),
         ),
         (
             "knots and multiplicities differ in count",
@@ -713,6 +836,10 @@ fn nurbs_surface_rules() {
             s.control_points[1].pop();
         })),
         "control point rows differ in length"
+    );
+    assert_eq!(
+        nurbs_reason(nurbs_surface_error(|s| s.degree_u = usize::MAX)),
+        "needs at least u degree + 1 control point rows"
     );
     assert_eq!(
         nurbs_reason(nurbs_surface_error(|s| s.knots_u = vec![1.0, 0.0])),

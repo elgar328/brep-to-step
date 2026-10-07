@@ -7,7 +7,9 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub enum Error {
     /// A number that cannot be written: NaN, an infinity, or a value outside
-    /// the range its entity allows.
+    /// the range its entity allows. It may also be a length computed from
+    /// the input — a straight edge's or an extrusion's — that comes out as 0
+    /// or infinity because the input is too small or too large.
     InvalidNumber {
         /// Which input the number was given for.
         what: &'static str,

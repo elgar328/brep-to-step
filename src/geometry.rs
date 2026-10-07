@@ -191,6 +191,22 @@ fn check_positive(what: &'static str, value: f64) -> Result<(), Error> {
     }
 }
 
+/// `v` scaled to unit length, and its length. The arithmetic follows
+/// step-io's `StepBuilder` term for term, so both write the same bits.
+fn unit(v: [f64; 3]) -> ([f64; 3], f64) {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    ([v[0] / len, v[1] / len, v[2] / len], len)
+}
+
+/// [`unit`] must give a finite direction and a finite, positive length. A
+/// vector of finite, nonzero components can still fail: its squared length
+/// underflows to 0 or overflows to infinity.
+fn check_unit(what: &'static str, v: [f64; 3]) -> Result<(), Error> {
+    let (direction, len) = unit(v);
+    check_positive(what, len)?;
+    check_finite(what, direction)
+}
+
 /// A straight edge needs two distinct points.
 // Exactly coincident only, as in `check_direction`.
 #[allow(clippy::float_cmp)]
@@ -231,7 +247,10 @@ impl Curve {
     /// at one vertex.
     pub(crate) fn check(&self, start: [f64; 3], end: [f64; 3]) -> Result<(), Error> {
         match self {
-            Curve::Line => check_not_coincident(start, end),
+            Curve::Line => {
+                check_not_coincident(start, end)?;
+                check_unit("line length", sub(end, start))
+            }
             Curve::LineAlong(direction) => {
                 check_direction("line direction", *direction)?;
                 check_not_coincident(start, end)
@@ -318,7 +337,8 @@ impl Surface {
             }
             Surface::LinearExtrusion { profile, sweep } => {
                 profile.check()?;
-                check_direction("extrusion sweep", *sweep)
+                check_direction("extrusion sweep", *sweep)?;
+                check_unit("extrusion sweep length", *sweep)
             }
             Surface::Revolution {
                 profile,
@@ -332,6 +352,10 @@ impl Surface {
             Surface::Nurbs(surface) => surface.check(),
         }
     }
+}
+
+fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
@@ -376,13 +400,9 @@ fn write_placed(data: &mut Data, name: &'static str, frame: &Frame, values: &[f6
 /// The curve of an edge from `start` to `end`. The arithmetic follows
 /// step-io's `StepBuilder::edge` term for term, so both write the same bits.
 pub(crate) fn write_curve(data: &mut Data, curve: &Curve, start: [f64; 3], end: [f64; 3]) -> Ref {
-    let delta = [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
+    let delta = sub(end, start);
     match curve {
-        Curve::Line => {
-            let len = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
-            let direction = [delta[0] / len, delta[1] / len, delta[2] / len];
-            write_line(data, start, direction)
-        }
+        Curve::Line => write_line(data, start, unit(delta).0),
         Curve::LineAlong(direction) => {
             let along = direction[0] * delta[0] + direction[1] * delta[1] + direction[2] * delta[2];
             let direction = if along < 0.0 {
@@ -464,8 +484,7 @@ pub(crate) fn write_surface(data: &mut Data, surface: &Surface) -> Ref {
         } => write_placed(data, "CONICAL_SURFACE", frame, &[*radius, *semi_angle]),
         Surface::LinearExtrusion { profile, sweep } => {
             let swept = write_profile(data, profile);
-            let len = (sweep[0] * sweep[0] + sweep[1] * sweep[1] + sweep[2] * sweep[2]).sqrt();
-            let direction = [sweep[0] / len, sweep[1] / len, sweep[2] / len];
+            let (direction, len) = unit(*sweep);
             let orientation = write_direction(data, direction);
             let vector = data.simple(
                 "VECTOR",

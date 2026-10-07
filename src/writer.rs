@@ -85,7 +85,9 @@ impl StepWriter {
     /// [`Error::ForeignHandle`] for a vertex from another writer;
     /// [`Error::InvalidNumber`] or [`Error::ZeroVector`] for a bad line
     /// direction; [`Error::ZeroLengthLine`] for a straight edge whose
-    /// vertices are at the same point.
+    /// vertices are at the same point, and [`Error::InvalidNumber`] for one
+    /// whose vertices are so close together or so far apart that its length
+    /// cannot be computed.
     // Taken by value like every input: callers build one per call.
     #[allow(clippy::needless_pass_by_value)]
     pub fn edge(&mut self, start: Vertex, end: Vertex, curve: Curve) -> Result<Edge, Error> {
