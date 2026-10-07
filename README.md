@@ -1,5 +1,10 @@
 # brep-to-step
 
+[![crates.io](https://img.shields.io/crates/v/brep-to-step.svg)](https://crates.io/crates/brep-to-step)
+[![docs.rs](https://img.shields.io/docsrs/brep-to-step)](https://docs.rs/brep-to-step)
+[![CI](https://github.com/elgar328/brep-to-step/actions/workflows/ci.yml/badge.svg)](https://github.com/elgar328/brep-to-step/actions/workflows/ci.yml)
+[![license](https://img.shields.io/crates/l/brep-to-step.svg)](#license)
+
 A minimal STEP AP242 exporter for B-rep CAD kernels.
 
 > ⚠️ **Experimental** — early stage; expect breaking API changes.

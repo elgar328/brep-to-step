@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-08
+
 ### Added
 
 - `StepWriter`, which writes B-rep solids as STEP AP242 (edition 2) files.
@@ -34,3 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lists, B-spline data that breaks STEP's rules, handles from another
   writer, parts with no solid, and header strings over 256 characters.
 - Reproducible output: the same input always produces the same bytes.
+
+[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/elgar328/brep-to-step/releases/tag/v0.1.0
