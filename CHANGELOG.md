@@ -9,32 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Error::Io`, for a failure to write to the output.
-- `StepWriter::<Vec<u8>>::finish_to_string`, which ends a file written to
-  memory and returns its text.
-- `Orientation` (`Forward` or `Reversed`): which way a face, or an edge in a
-  face's loop, is used relative to the geometry it lies on.
+- `Error::Io` reports a failure to write to the output.
+- `StepWriter::<Vec<u8>>::finish_to_string` ends a file written to memory
+  and returns its text.
+- `Orientation` (`Forward` or `Reversed`) says which way a face, or an edge in
+  a face's loop, runs relative to the geometry it lies on.
 
 ### Changed
 
-- `StepWriter` writes to any `io::Write` — a file, a pipe, a `Vec<u8>` — and
-  sends the file on in chunks of 64 KiB as it is written, instead of holding
-  its text in a `String`. `StepWriter::new(out, &header, units)` takes the
-  output and the header, which comes first in the file, so header strings
-  over 256 characters are now rejected by `new`; `finish()` returns the
-  output.
-- A failure to write to the output does not fail the calls that follow:
+- `StepWriter` writes to any `io::Write`, such as a file or a `Vec<u8>`, and
+  sends the text on in 64 KiB chunks instead of holding the whole file in a
+  `String`.
+- `StepWriter::new(out, &header, units)` takes the output and the header,
+  since the header comes first in the file. Header strings over 256
+  characters are therefore rejected by `new` rather than `finish`.
+- `StepWriter::finish` returns the output instead of a `String`.
+- A failure to write to the output does not make the calls that follow fail;
   `finish` reports it.
 - A part with no solid is written as a part with no shape, as step-io writes
-  it, instead of being an error.
-- `Error` no longer implements `Clone`, since it can hold an `io::Error`.
+  it, rather than causing an error.
+- `Error` no longer implements `Clone`, because it can hold an `io::Error`.
 - `StepWriter::face` takes an `Orientation` instead of the `same_sense`
   boolean, and `Bound::outer` and `Bound::inner` take `(Edge, Orientation)`
-  pairs instead of `(Edge, bool)`, so a call says which way it means.
+  pairs instead of `(Edge, bool)`.
 
 ### Removed
 
-- `Error::EmptyPart`: a part with no solid is no longer an error.
+- `Error::EmptyPart` is removed, since a part with no solid is no longer an
+  error.
 
 ## [0.1.0] - 2026-10-08
 
