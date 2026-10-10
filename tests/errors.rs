@@ -5,6 +5,7 @@ mod common;
 
 use std::f64::consts::FRAC_PI_2;
 
+use brep_to_step::Orientation::{Forward, Reversed};
 use brep_to_step::{
     Bound, Curve, Error, Frame, NurbsCurve, NurbsSurface, Profile, StepWriter, Surface, Units,
     VoidShellNormals,
@@ -12,8 +13,8 @@ use brep_to_step::{
 use common::fixtures::{LineKind, cube, cubic, grid};
 use common::scene::{Handles, header, replay, write_ours};
 
-fn writer() -> StepWriter {
-    StepWriter::new(Units::default()).expect("writer")
+fn writer() -> StepWriter<Vec<u8>> {
+    StepWriter::new(Vec::new(), &header(), Units::default()).expect("writer")
 }
 
 fn frame() -> Frame {
@@ -29,7 +30,7 @@ fn plane(frame: Frame) -> Surface {
 }
 
 /// A writer holding the unit cube, and its handles.
-fn with_cube() -> (StepWriter, Handles) {
+fn with_cube() -> (StepWriter<Vec<u8>>, Handles) {
     let mut w = writer();
     let handles = replay(&mut w, &cube("cube", [0.0; 3], 1.0, LineKind::Along));
     (w, handles)
@@ -53,7 +54,7 @@ fn non_finite_numbers() {
             ..
         })
     ));
-    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let bound = Bound::outer(vec![(h.edges[0], Forward)]);
     for bad in [
         Frame {
             origin: [f64::NAN, 0.0, 0.0],
@@ -69,7 +70,7 @@ fn non_finite_numbers() {
         },
     ] {
         assert!(matches!(
-            w.face(plane(bad), true, std::slice::from_ref(&bound)),
+            w.face(plane(bad), Forward, std::slice::from_ref(&bound)),
             Err(Error::InvalidNumber {
                 what: "plane frame",
                 ..
@@ -87,7 +88,7 @@ fn zero_vectors() {
             what: "line direction"
         })
     ));
-    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let bound = Bound::outer(vec![(h.edges[0], Forward)]);
     for bad in [
         Frame {
             axis: [0.0; 3],
@@ -99,7 +100,7 @@ fn zero_vectors() {
         },
     ] {
         assert!(matches!(
-            w.face(plane(bad), true, std::slice::from_ref(&bound)),
+            w.face(plane(bad), Forward, std::slice::from_ref(&bound)),
             Err(Error::ZeroVector {
                 what: "plane frame"
             })
@@ -110,14 +111,14 @@ fn zero_vectors() {
 #[test]
 fn parallel_axes() {
     let (mut w, h) = with_cube();
-    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let bound = Bound::outer(vec![(h.edges[0], Forward)]);
     // Anti-parallel is parallel too.
     let bad = Frame {
         ref_dir: [0.0, 0.0, -2.0],
         ..frame()
     };
     assert!(matches!(
-        w.face(plane(bad), true, &[bound]),
+        w.face(plane(bad), Forward, &[bound]),
         Err(Error::ParallelAxes {
             what: "plane frame"
         })
@@ -150,7 +151,7 @@ fn unrepresentable_line_lengths() {
         let mut w = writer();
         w.vertex(a).expect("start");
         w.vertex(b).expect("end");
-        w.finish(&header()).expect("finish")
+        w.finish_to_string().expect("finish")
     };
     for (a, b) in [
         ([0.0; 3], [1e-200, 0.0, 0.0]),
@@ -163,7 +164,7 @@ fn unrepresentable_line_lengths() {
             &w.edge(start, end, Curve::Line).map(|_| ()),
             "line length"
         ));
-        assert_eq!(w.finish(&header()).expect("finish"), vertices_only(a, b));
+        assert_eq!(w.finish_to_string().expect("finish"), vertices_only(a, b));
     }
     let mut w = writer();
     let start = w.vertex([0.0; 3]).expect("start");
@@ -215,7 +216,7 @@ fn extreme_values_never_panic() {
     const CALLS: usize = 2000;
     let mut rng = XorShift(0x9E37_79B9_7F4A_7C15);
     let (mut w, h) = with_cube();
-    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let bound = Bound::outer(vec![(h.edges[0], Forward)]);
     let (mut lines, mut sweeps) = (0, 0);
     for _ in 0..CALLS {
         let start = w.vertex(rng.point()).expect("finite vertex");
@@ -229,7 +230,7 @@ fn extreme_values_never_panic() {
             sweep: rng.point(),
         };
         sweeps += usize::from(
-            w.face(extrusion, true, std::slice::from_ref(&bound))
+            w.face(extrusion, Forward, std::slice::from_ref(&bound))
                 .is_ok(),
         );
     }
@@ -242,7 +243,7 @@ fn extreme_values_never_panic() {
         0 < sweeps && sweeps < CALLS,
         "{sweeps} of {CALLS} sweeps written"
     );
-    let text = w.finish(&header()).expect("finish");
+    let text = w.finish_to_string().expect("finish");
     if let Err(e) = step_io::parser::parse(&text) {
         panic!("output does not parse: {e}");
     }
@@ -252,7 +253,7 @@ fn extreme_values_never_panic() {
 fn empty_lists() {
     let (mut w, h) = with_cube();
     assert!(matches!(
-        w.face(plane(frame()), true, &[]),
+        w.face(plane(frame()), Forward, &[]),
         Err(Error::Empty {
             what: "face bounds"
         })
@@ -260,9 +261,9 @@ fn empty_lists() {
     assert!(matches!(
         w.face(
             plane(frame()),
-            true,
+            Forward,
             &[
-                Bound::outer(vec![(h.edges[0], true)]),
+                Bound::outer(vec![(h.edges[0], Forward)]),
                 Bound::inner(Vec::new())
             ]
         ),
@@ -284,10 +285,10 @@ fn multiple_outer_bounds() {
     assert!(matches!(
         w.face(
             plane(frame()),
-            true,
+            Forward,
             &[
-                Bound::outer(vec![(h.edges[0], true)]),
-                Bound::outer(vec![(h.edges[1], true)])
+                Bound::outer(vec![(h.edges[0], Forward)]),
+                Bound::outer(vec![(h.edges[1], Forward)])
             ]
         ),
         Err(Error::MultipleOuterBounds)
@@ -298,8 +299,8 @@ fn multiple_outer_bounds() {
 fn foreign_handles() {
     let (mut w, h) = with_cube();
     let (_other_writer, other) = with_cube();
-    let mine = Bound::outer(vec![(h.edges[0], true)]);
-    let mixed = Bound::outer(vec![(h.edges[0], true), (other.edges[1], true)]);
+    let mine = Bound::outer(vec![(h.edges[0], Forward)]);
+    let mixed = Bound::outer(vec![(h.edges[0], Forward), (other.edges[1], Forward)]);
 
     for (start, end) in [
         (other.vertices[0], h.vertices[1]),
@@ -311,7 +312,7 @@ fn foreign_handles() {
         ));
     }
     assert!(matches!(
-        w.face(plane(frame()), true, &[mixed]),
+        w.face(plane(frame()), Forward, &[mixed]),
         Err(Error::ForeignHandle)
     ));
     assert!(matches!(
@@ -323,17 +324,7 @@ fn foreign_handles() {
         Err(Error::ForeignHandle)
     ));
     // The writer's own handles still work.
-    assert!(w.face(plane(frame()), true, &[mine]).is_ok());
-}
-
-#[test]
-fn part_without_a_solid() {
-    let (mut w, _) = with_cube();
-    w.part("hollow promise");
-    assert!(matches!(
-        w.finish(&header()),
-        Err(Error::EmptyPart { name }) if name == "hollow promise"
-    ));
+    assert!(w.face(plane(frame()), Forward, &[mine]).is_ok());
 }
 
 /// Rejected calls write nothing and use up no `#id`: a writer that made
@@ -366,18 +357,10 @@ fn rejected_calls_leave_no_trace() {
     assert!(
         w.face(
             plane(frame()),
-            true,
-            &[Bound::outer(vec![(edge, true)]), Bound::inner(Vec::new())]
-        )
-        .is_err()
-    );
-    assert!(
-        w.face(
-            plane(frame()),
-            true,
+            Forward,
             &[
-                Bound::outer(vec![(edge, true)]),
-                Bound::outer(vec![(edge, false)])
+                Bound::outer(vec![(edge, Forward)]),
+                Bound::inner(Vec::new())
             ]
         )
         .is_err()
@@ -385,26 +368,44 @@ fn rejected_calls_leave_no_trace() {
     assert!(
         w.face(
             plane(frame()),
-            true,
-            &[Bound::outer(vec![(edge, true), (other.edges[0], true)])]
+            Forward,
+            &[
+                Bound::outer(vec![(edge, Forward)]),
+                Bound::outer(vec![(edge, Reversed)])
+            ]
         )
         .is_err()
     );
     assert!(
-        w.face(plane(parallel), true, &[Bound::outer(vec![(edge, true)])])
-            .is_err()
+        w.face(
+            plane(frame()),
+            Forward,
+            &[Bound::outer(vec![
+                (edge, Forward),
+                (other.edges[0], Forward)
+            ])]
+        )
+        .is_err()
+    );
+    assert!(
+        w.face(
+            plane(parallel),
+            Forward,
+            &[Bound::outer(vec![(edge, Forward)])]
+        )
+        .is_err()
     );
     assert!(w.solid(h.parts[0], &[]).is_err());
     assert!(w.solid(h.parts[0], &[h.faces[0], other.faces[0]]).is_err());
 
     reject_curved_calls(&mut w, &h, &other);
 
-    assert_eq!(w.finish(&header()).expect("finish"), clean);
+    assert_eq!(w.finish_to_string().expect("finish"), clean);
 }
 
 /// Rejected calls on curved geometry, voids, and NURBS, for
 /// [`rejected_calls_leave_no_trace`].
-fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
+fn reject_curved_calls(w: &mut StepWriter<Vec<u8>>, h: &Handles, other: &Handles) {
     let edge = h.edges[0];
     let circle = |radius| Curve::Circle {
         frame: frame(),
@@ -417,8 +418,8 @@ fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
                 frame: frame(),
                 radius: -1.0
             },
-            true,
-            &[Bound::outer(vec![(edge, true)])]
+            Forward,
+            &[Bound::outer(vec![(edge, Forward)])]
         )
         .is_err()
     );
@@ -439,12 +440,12 @@ fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
         )
         .is_err()
     );
-    let bound = Bound::outer(vec![(edge, true)]);
+    let bound = Bound::outer(vec![(edge, Forward)]);
     let bad_extrusion = |profile, sweep| Surface::LinearExtrusion { profile, sweep };
     assert!(
         w.face(
             bad_extrusion(Profile::Nurbs(bad_curve), [0.0, 0.0, 1.0]),
-            true,
+            Forward,
             std::slice::from_ref(&bound)
         )
         .is_err()
@@ -453,7 +454,7 @@ fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
         assert!(
             w.face(
                 bad_extrusion(Profile::Nurbs(cubic()), sweep),
-                true,
+                Forward,
                 std::slice::from_ref(&bound)
             )
             .is_err()
@@ -464,7 +465,7 @@ fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
 #[test]
 fn radii_must_be_finite_and_positive() {
     let (mut w, h) = with_cube();
-    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let bound = Bound::outer(vec![(h.edges[0], Forward)]);
     for bad in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
         assert!(matches!(
             w.edge(
@@ -486,7 +487,7 @@ fn radii_must_be_finite_and_positive() {
                     frame: frame(),
                     radius: bad
                 },
-                true,
+                Forward,
                 std::slice::from_ref(&bound)
             ),
             Err(Error::InvalidNumber {
@@ -500,7 +501,7 @@ fn radii_must_be_finite_and_positive() {
 #[test]
 fn circle_and_cylinder_frames_are_checked() {
     let (mut w, h) = with_cube();
-    let bound = Bound::outer(vec![(h.edges[0], true)]);
+    let bound = Bound::outer(vec![(h.edges[0], Forward)]);
     let circle = |frame| Curve::Circle { frame, radius: 1.0 };
     let v0 = h.vertices[0];
     assert!(matches!(
@@ -539,7 +540,7 @@ fn circle_and_cylinder_frames_are_checked() {
                 },
                 radius: 1.0
             },
-            true,
+            Forward,
             &[bound]
         ),
         Err(Error::ParallelAxes {
@@ -603,8 +604,12 @@ fn voids_reject_foreign_handles() {
 /// A face on `surface`, bounded by the cube's first edge.
 fn face_on(surface: Surface) -> Result<(), Error> {
     let (mut w, h) = with_cube();
-    w.face(surface, true, &[Bound::outer(vec![(h.edges[0], true)])])
-        .map(|_| ())
+    w.face(
+        surface,
+        Forward,
+        &[Bound::outer(vec![(h.edges[0], Forward)])],
+    )
+    .map(|_| ())
 }
 
 /// An edge between the cube's first two vertices along `curve`.

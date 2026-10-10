@@ -15,7 +15,7 @@
 //! ```
 //! use std::collections::HashMap;
 //!
-//! use brep_to_step::{Bound, Curve, Frame, Header, StepWriter, Surface, Units};
+//! use brep_to_step::{Bound, Curve, Frame, Header, Orientation, StepWriter, Surface, Units};
 //!
 //! // Vertex i sits at (x, y, z), where i = x + 2y + 4z.
 //! let points: Vec<[f64; 3]> = (0..8u8)
@@ -32,7 +32,14 @@
 //!     ([1, 3, 7, 5], [1.0, 0.0, 0.0]),
 //! ];
 //!
-//! let mut w = StepWriter::new(Units::default())?;
+//! // The header comes first in the file, so the writer takes it at the start.
+//! // A `Vec<u8>` gathers the text in memory; pass a `File` to write a file.
+//! let header = Header {
+//!     timestamp: "2026-10-08T12:00:00".to_owned(),
+//!     originating_system: "my kernel".to_owned(),
+//!     ..Header::default()
+//! };
+//! let mut w = StepWriter::new(Vec::new(), &header, Units::default())?;
 //! let part = w.part("cube");
 //! let vertices = points
 //!     .iter()
@@ -56,8 +63,13 @@
 //!                 edge
 //!             }
 //!         };
-//!         // `true` if the loop runs along the edge from its start to its end.
-//!         bound.push((edge, a < b));
+//!         // The edge was written from its lower vertex to its higher one.
+//!         let along = if a < b {
+//!             Orientation::Forward
+//!         } else {
+//!             Orientation::Reversed
+//!         };
+//!         bound.push((edge, along));
 //!     }
 //!     let [p, q] = [points[cycle[0]], points[cycle[1]]];
 //!     let plane = Frame {
@@ -65,15 +77,12 @@
 //!         axis: normal,
 //!         ref_dir: [q[0] - p[0], q[1] - p[1], q[2] - p[2]],
 //!     };
-//!     shell.push(w.face(Surface::Plane(plane), true, &[Bound::outer(bound)])?);
+//!     let face = w.face(Surface::Plane(plane), Orientation::Forward, &[Bound::outer(bound)])?;
+//!     shell.push(face);
 //! }
 //! w.solid(part, &shell)?;
 //!
-//! let step = w.finish(&Header {
-//!     timestamp: "2026-10-08T12:00:00".to_owned(),
-//!     originating_system: "my kernel".to_owned(),
-//!     ..Header::default()
-//! })?;
+//! let step = w.finish_to_string()?;
 //! assert!(step.starts_with("ISO-10303-21;"));
 //! # Ok::<(), brep_to_step::Error>(())
 //! ```
@@ -86,7 +95,18 @@
 //! handle that later calls take. Every call writes new entities, so a vertex
 //! or edge shared by several faces should be written once and its handle
 //! reused. Only the caller knows which of its vertices and edges are the
-//! same, so the caller keeps that map.
+//! same, so the caller keeps that map. A part given no solid is written as a
+//! part with no shape.
+//!
+//! # Streaming
+//!
+//! The writer sends the file to its output as it goes, in chunks of 64 KiB,
+//! instead of holding the text in memory. What it keeps grows only with the
+//! vertices — 32 bytes each, for the straight edges between them — and with
+//! the parts and their solids, a small fraction of the file. To get the file as text, write to a `Vec<u8>` and
+//! end with [`finish_to_string`](StepWriter::finish_to_string), as above;
+//! the whole file is then in memory, so write a large one to a
+//! [`File`](std::fs::File) instead.
 //!
 //! # Values are written exactly
 //!
@@ -104,6 +124,12 @@
 //! returns an [`Error`] writes nothing, so the writer stays usable. Whether
 //! the geometry agrees with the topology (a vertex lying on its edge's curve,
 //! a loop that closes) is not checked; that is up to the caller.
+//!
+//! Writing to the output can fail too — a full disk, a closed pipe. That
+//! failure is not the input's, so the calls go on returning `Ok`; the writer
+//! skips the writes that would follow, and [`finish`](StepWriter::finish)
+//! reports it as [`Error::Io`]. The output then holds an incomplete file to
+//! discard. The file is complete only once `finish` returns `Ok`.
 //!
 //! # What is not written
 //!
@@ -136,5 +162,5 @@ pub use geometry::{Curve, Frame, Profile, Surface};
 pub use header::Header;
 pub use nurbs::{NurbsCurve, NurbsSurface};
 pub use product::Part;
-pub use topology::{Bound, Edge, Face, Vertex, VoidShellNormals};
+pub use topology::{Bound, Edge, Face, Orientation, Vertex, VoidShellNormals};
 pub use writer::StepWriter;

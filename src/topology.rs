@@ -27,24 +27,47 @@ pub struct Face {
     pub(crate) entity: Ref,
 }
 
-/// One boundary loop of a face: its edges in order, each paired with `true`
-/// if the loop runs along the edge from its start vertex to its end vertex.
+/// Which way a face, or an edge in a face's loop, is used relative to the
+/// geometry it lies on.
+///
+/// For a face this is STEP's `ADVANCED_FACE.same_sense`; for an edge in a
+/// loop, `ORIENTED_EDGE.orientation`. Both are booleans in STEP, so there are
+/// only ever these two values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Orientation {
+    /// A face: its normal is its surface's normal. An edge in a loop: the
+    /// loop runs along the edge from its start vertex to its end vertex.
+    Forward,
+    /// A face: its normal is against its surface's normal. An edge in a loop:
+    /// the loop runs along the edge from its end vertex back to its start.
+    Reversed,
+}
+
+impl Orientation {
+    /// The STEP boolean: `.T.` for [`Forward`](Self::Forward).
+    pub(crate) fn is_forward(self) -> bool {
+        self == Self::Forward
+    }
+}
+
+/// One boundary loop of a face: its edges in order, each with the
+/// [`Orientation`] in which the loop runs along it.
 #[derive(Debug, Clone)]
 pub struct Bound {
-    pub(crate) edges: Vec<(Edge, bool)>,
+    pub(crate) edges: Vec<(Edge, Orientation)>,
     pub(crate) outer: bool,
 }
 
 impl Bound {
     /// The face's outer boundary. A face has at most one.
     #[must_use]
-    pub fn outer(edges: Vec<(Edge, bool)>) -> Self {
+    pub fn outer(edges: Vec<(Edge, Orientation)>) -> Self {
         Self { edges, outer: true }
     }
 
     /// An inner boundary — a hole in the face.
     #[must_use]
-    pub fn inner(edges: Vec<(Edge, bool)>) -> Self {
+    pub fn inner(edges: Vec<(Edge, Orientation)>) -> Self {
         Self {
             edges,
             outer: false,
@@ -91,13 +114,18 @@ pub(crate) fn write_edge(data: &mut Data, start: Ref, end: Ref, curve: Ref) -> R
     )
 }
 
-pub(crate) fn write_face(data: &mut Data, surface: Ref, same_sense: bool, bounds: &[Bound]) -> Ref {
+pub(crate) fn write_face(
+    data: &mut Data,
+    surface: Ref,
+    orientation: Orientation,
+    bounds: &[Bound],
+) -> Ref {
     let mut face_bounds = Vec::with_capacity(bounds.len());
     for bound in bounds {
         let oriented: Vec<Ref> = bound
             .edges
             .iter()
-            .map(|(edge, forward)| {
+            .map(|(edge, along)| {
                 data.simple(
                     "ORIENTED_EDGE",
                     &[
@@ -105,7 +133,7 @@ pub(crate) fn write_face(data: &mut Data, surface: Ref, same_sense: bool, bounds
                         Param::Derived,
                         Param::Derived,
                         Param::Ref(edge.entity),
-                        Param::Bool(*forward),
+                        Param::Bool(along.is_forward()),
                     ],
                 )
             })
@@ -127,7 +155,7 @@ pub(crate) fn write_face(data: &mut Data, surface: Ref, same_sense: bool, bounds
             Param::Str(""),
             Param::Refs(&face_bounds),
             Param::Ref(surface),
-            Param::Bool(same_sense),
+            Param::Bool(orientation.is_forward()),
         ],
     )
 }

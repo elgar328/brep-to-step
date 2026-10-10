@@ -19,9 +19,9 @@ fn header() -> Header {
 }
 
 fn ours(units: Units) -> String {
-    StepWriter::new(units)
+    StepWriter::new(Vec::new(), &header(), units)
         .expect("writer")
-        .finish(&header())
+        .finish_to_string()
         .expect("finish")
 }
 
@@ -117,9 +117,9 @@ fn header_fields_round_trip() {
         originating_system: "nacre".to_owned(),
         authorisation: String::new(),
     };
-    let file = StepWriter::new(Units::default())
+    let file = StepWriter::new(Vec::new(), &header, Units::default())
         .expect("writer")
-        .finish(&header)
+        .finish_to_string()
         .expect("finish");
     assert!(file.is_ascii(), "non-ASCII output:\n{file}");
 
@@ -153,10 +153,14 @@ fn same_input_same_bytes() {
 #[test]
 fn uncertainty_must_be_finite_and_positive() {
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -1e-7] {
-        let result = StepWriter::new(Units {
-            uncertainty: bad,
-            ..Units::default()
-        });
+        let result = StepWriter::new(
+            Vec::new(),
+            &header(),
+            Units {
+                uncertainty: bad,
+                ..Units::default()
+            },
+        );
         assert!(
             matches!(
                 result,
@@ -172,24 +176,21 @@ fn uncertainty_must_be_finite_and_positive() {
 
 #[test]
 fn header_strings_are_at_most_256_characters() {
-    let finish = |header: &Header| {
-        StepWriter::new(Units::default())
-            .expect("writer")
-            .finish(header)
-    };
+    // The header is written first, so `new` checks it.
+    let start = |header: &Header| StepWriter::new(Vec::new(), header, Units::default());
 
     let at_limit = Header {
         file_name: "가".repeat(256),
         ..header()
     };
-    assert!(finish(&at_limit).is_ok());
+    assert!(start(&at_limit).is_ok());
 
     let long_name = Header {
         file_name: "가".repeat(257),
         ..header()
     };
     assert!(matches!(
-        finish(&long_name),
+        start(&long_name),
         Err(Error::HeaderTooLong {
             field: "file_name",
             chars: 257
@@ -201,7 +202,7 @@ fn header_strings_are_at_most_256_characters() {
         ..header()
     };
     assert!(matches!(
-        finish(&long_author),
+        start(&long_author),
         Err(Error::HeaderTooLong {
             field: "authors",
             chars: 300

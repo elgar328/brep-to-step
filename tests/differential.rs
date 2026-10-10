@@ -10,7 +10,7 @@ use common::fixtures::{
     LineKind, coverage, cube, cubic, cylinder, grid, hollow_box, plate_with_hole, quarter_arc,
     real_solids, two_parts, two_solids_one_part,
 };
-use common::scene::{Scene, write_ours, write_step_io};
+use common::scene::{PartSpec, Scene, write_ours, write_step_io};
 
 /// Compare with step-io, read back strictly, and return our file.
 fn check(scene: &Scene) -> String {
@@ -152,6 +152,32 @@ fn two_solids_in_one_part() {
     let file = check(&two_solids_one_part());
     assert_eq!(count(&file, "PRODUCT"), 1);
     assert_eq!(count(&file, "MANIFOLD_SOLID_BREP"), 2);
+}
+
+/// A part with no solid is written as a part with no shape: a plain
+/// `SHAPE_REPRESENTATION` holding only its origin, as step-io writes it.
+#[test]
+fn parts_without_a_solid() {
+    let empty = |name: &str| PartSpec {
+        name: name.to_owned(),
+        solids: Vec::new(),
+    };
+    let alone = Scene {
+        parts: vec![empty("empty")],
+        vertices: Vec::new(),
+        edges: Vec::new(),
+        faces: Vec::new(),
+    };
+    let file = check(&alone);
+    assert_eq!(count(&file, "SHAPE_REPRESENTATION"), 1);
+    assert_eq!(count(&file, "ADVANCED_BREP_SHAPE_REPRESENTATION"), 0);
+
+    let mut beside_a_cube = cube("cube", [0.0; 3], 1.0, LineKind::Along);
+    beside_a_cube.parts.push(empty("empty"));
+    let file = check(&beside_a_cube);
+    assert_eq!(count(&file, "PRODUCT"), 2);
+    assert_eq!(count(&file, "SHAPE_REPRESENTATION"), 1);
+    assert_eq!(count(&file, "ADVANCED_BREP_SHAPE_REPRESENTATION"), 1);
 }
 
 #[test]

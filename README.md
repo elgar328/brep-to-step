@@ -20,6 +20,8 @@ A minimal STEP AP242 exporter for B-rep CAD kernels.
   the same bits; nothing is normalized or recomputed.
 - **Fails cleanly** — input is checked before anything is written, so a call
   that returns an error leaves the file untouched.
+- **Streaming** — writes the file as it goes instead of holding its text in
+  memory.
 - **Reproducible** — the same input always produces the same file.
 - **No runtime dependencies.**
 

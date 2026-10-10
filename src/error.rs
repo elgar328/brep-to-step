@@ -1,10 +1,10 @@
 //! The error type.
 
-use std::fmt;
+use std::{fmt, io};
 
 /// Why a [`StepWriter`](crate::StepWriter) call failed.
 #[non_exhaustive]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Error {
     /// A number that cannot be written: NaN, an infinity, or a value outside
     /// the range its entity allows. It may also be a length computed from
@@ -42,11 +42,6 @@ pub enum Error {
     MultipleOuterBounds,
     /// A handle made by a different [`StepWriter`](crate::StepWriter).
     ForeignHandle,
-    /// A part with no solid in it.
-    EmptyPart {
-        /// The part's name.
-        name: String,
-    },
     /// A HEADER string longer than the 256 characters Part 21 allows.
     HeaderTooLong {
         /// The [`Header`](crate::Header) field that is too long.
@@ -54,6 +49,11 @@ pub enum Error {
         /// Its length in characters.
         chars: usize,
     },
+    /// Writing to the output failed. Writes after the first failure are
+    /// skipped and the failure is reported by
+    /// [`finish`](crate::StepWriter::finish); the output holds an incomplete
+    /// file.
+    Io(io::Error),
 }
 
 impl fmt::Display for Error {
@@ -71,13 +71,20 @@ impl fmt::Display for Error {
             Self::InvalidNurbs { reason } => write!(f, "invalid NURBS: {reason}"),
             Self::MultipleOuterBounds => f.write_str("face with more than one outer bound"),
             Self::ForeignHandle => f.write_str("handle from a different writer"),
-            Self::EmptyPart { name } => write!(f, "part {name:?} has no solid"),
             Self::HeaderTooLong { field, chars } => write!(
                 f,
                 "header {field} is {chars} characters long; Part 21 allows 256"
             ),
+            Self::Io(e) => write!(f, "writing the file failed: {e}"),
         }
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
