@@ -122,7 +122,7 @@ pub struct Handles {
 }
 
 /// Write `scene` into `w`: parts, vertices, edges, faces, then solids.
-pub fn replay(w: &mut StepWriter, scene: &Scene) -> Handles {
+pub fn replay<W: std::io::Write>(w: &mut StepWriter<W>, scene: &Scene) -> Handles {
     let parts: Vec<Part> = scene.parts.iter().map(|p| w.part(&p.name)).collect();
     let vertices: Vec<Vertex> = scene
         .vertices
@@ -189,9 +189,9 @@ pub fn header() -> Header {
 
 /// `scene` written by brep-to-step.
 pub fn write_ours(scene: &Scene) -> String {
-    let mut w = StepWriter::new(Units::default()).expect("writer");
+    let mut w = StepWriter::new(Vec::new(), &header(), Units::default()).expect("writer");
     replay(&mut w, scene);
-    w.finish(&header()).expect("finish")
+    w.finish_to_string().expect("finish")
 }
 
 /// `scene` written by step-io's `StepBuilder`, call for call.

@@ -12,8 +12,8 @@ use brep_to_step::{
 use common::fixtures::{LineKind, cube, cubic, grid};
 use common::scene::{Handles, header, replay, write_ours};
 
-fn writer() -> StepWriter {
-    StepWriter::new(Units::default()).expect("writer")
+fn writer() -> StepWriter<Vec<u8>> {
+    StepWriter::new(Vec::new(), &header(), Units::default()).expect("writer")
 }
 
 fn frame() -> Frame {
@@ -29,7 +29,7 @@ fn plane(frame: Frame) -> Surface {
 }
 
 /// A writer holding the unit cube, and its handles.
-fn with_cube() -> (StepWriter, Handles) {
+fn with_cube() -> (StepWriter<Vec<u8>>, Handles) {
     let mut w = writer();
     let handles = replay(&mut w, &cube("cube", [0.0; 3], 1.0, LineKind::Along));
     (w, handles)
@@ -150,7 +150,7 @@ fn unrepresentable_line_lengths() {
         let mut w = writer();
         w.vertex(a).expect("start");
         w.vertex(b).expect("end");
-        w.finish(&header()).expect("finish")
+        w.finish_to_string().expect("finish")
     };
     for (a, b) in [
         ([0.0; 3], [1e-200, 0.0, 0.0]),
@@ -163,7 +163,7 @@ fn unrepresentable_line_lengths() {
             &w.edge(start, end, Curve::Line).map(|_| ()),
             "line length"
         ));
-        assert_eq!(w.finish(&header()).expect("finish"), vertices_only(a, b));
+        assert_eq!(w.finish_to_string().expect("finish"), vertices_only(a, b));
     }
     let mut w = writer();
     let start = w.vertex([0.0; 3]).expect("start");
@@ -242,7 +242,7 @@ fn extreme_values_never_panic() {
         0 < sweeps && sweeps < CALLS,
         "{sweeps} of {CALLS} sweeps written"
     );
-    let text = w.finish(&header()).expect("finish");
+    let text = w.finish_to_string().expect("finish");
     if let Err(e) = step_io::parser::parse(&text) {
         panic!("output does not parse: {e}");
     }
@@ -326,16 +326,6 @@ fn foreign_handles() {
     assert!(w.face(plane(frame()), true, &[mine]).is_ok());
 }
 
-#[test]
-fn part_without_a_solid() {
-    let (mut w, _) = with_cube();
-    w.part("hollow promise");
-    assert!(matches!(
-        w.finish(&header()),
-        Err(Error::EmptyPart { name }) if name == "hollow promise"
-    ));
-}
-
 /// Rejected calls write nothing and use up no `#id`: a writer that made
 /// them finishes byte for byte like one that did not.
 #[test]
@@ -399,12 +389,12 @@ fn rejected_calls_leave_no_trace() {
 
     reject_curved_calls(&mut w, &h, &other);
 
-    assert_eq!(w.finish(&header()).expect("finish"), clean);
+    assert_eq!(w.finish_to_string().expect("finish"), clean);
 }
 
 /// Rejected calls on curved geometry, voids, and NURBS, for
 /// [`rejected_calls_leave_no_trace`].
-fn reject_curved_calls(w: &mut StepWriter, h: &Handles, other: &Handles) {
+fn reject_curved_calls(w: &mut StepWriter<Vec<u8>>, h: &Handles, other: &Handles) {
     let edge = h.edges[0];
     let circle = |radius| Curve::Circle {
         frame: frame(),

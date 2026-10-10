@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Error::Io`, for a failure to write to the output.
+- `StepWriter::<Vec<u8>>::finish_to_string`, which ends a file written to
+  memory and returns its text.
+
+### Changed
+
+- `StepWriter` writes to any `io::Write` — a file, a pipe, a `Vec<u8>` — and
+  sends the file on in chunks of 64 KiB as it is written, instead of holding
+  its text in a `String`. `StepWriter::new(out, &header, units)` takes the
+  output and the header, which comes first in the file, so header strings
+  over 256 characters are now rejected by `new`; `finish()` returns the
+  output.
+- A failure to write to the output does not fail the calls that follow:
+  `finish` reports it.
+- A part with no solid is written as a part with no shape, as step-io writes
+  it, instead of being an error.
+- `Error` no longer implements `Clone`, since it can hold an `io::Error`.
+
+### Removed
+
+- `Error::EmptyPart`: a part with no solid is no longer an error.
+
 ## [0.1.0] - 2026-10-08
 
 ### Added

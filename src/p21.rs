@@ -80,9 +80,21 @@ impl Data {
         id
     }
 
-    /// The DATA section's lines, without the `DATA;` / `ENDSEC;` envelope.
-    pub(crate) fn into_body(self) -> String {
-        self.body
+    /// Append text that is not an entity — the header, the file's end. It
+    /// takes no id.
+    pub(crate) fn raw(&mut self, text: &str) {
+        self.body.push_str(text);
+    }
+
+    /// The text written since the last [`clear`](Self::clear).
+    pub(crate) fn pending(&self) -> &str {
+        &self.body
+    }
+
+    /// Drop the pending text once it has been sent on, keeping the buffer's
+    /// capacity for what follows.
+    pub(crate) fn clear(&mut self) {
+        self.body.clear();
     }
 
     /// Allocate the next id and write `#n = `.
@@ -467,12 +479,25 @@ mod tests {
         ]);
         assert_eq!((a, b, c), (Ref(1), Ref(2), Ref(3)));
         assert_eq!(
-            d.into_body(),
+            d.pending(),
             "#1 = CARTESIAN_POINT('',(0.,1.5E0,-2.));\n\
              #2 = EVERY_PARAM(2.5E-1,-3,'x',.MILLI.,.U.,.T.,.F.,#1,$,*,(),(4,4),(#1,#1),\
              ((#1),(1.)),LENGTH_MEASURE(1.E-7));\n\
              #3 = ( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) );\n"
         );
+    }
+
+    #[test]
+    fn raw_text_takes_no_id() {
+        let mut d = Data::new();
+        d.raw("HEADER;\n");
+        let a = d.simple("CARTESIAN_POINT", &[Param::Str(""), Param::Reals(&[0.0])]);
+        assert_eq!(a, Ref(1));
+        d.clear();
+        d.raw("ENDSEC;\n");
+        let b = d.simple("CARTESIAN_POINT", &[Param::Str(""), Param::Reals(&[1.0])]);
+        assert_eq!(b, Ref(2), "clearing sent text keeps the numbering");
+        assert_eq!(d.pending(), "ENDSEC;\n#2 = CARTESIAN_POINT('',(1.));\n");
     }
 
     #[test]

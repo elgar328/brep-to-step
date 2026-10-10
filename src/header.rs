@@ -2,7 +2,7 @@
 
 use crate::ap;
 use crate::error::Error;
-use crate::p21::write_str;
+use crate::p21::{Data, write_str};
 
 /// The HEADER section's free-text fields. Every field may be left empty.
 ///
@@ -49,10 +49,10 @@ pub(crate) fn check(header: &Header) -> Result<(), Error> {
     check_length("authorisation", &header.authorisation)
 }
 
-/// The whole file: the HEADER section built from `header` (already
-/// [`check`]ed), then `data_body` as the DATA section.
-pub(crate) fn write_file(header: &Header, data_body: &str) -> String {
-    let mut out = String::with_capacity(data_body.len() + 1024);
+/// The file's opening, from `ISO-10303-21;` through the HEADER section to
+/// `DATA;`, built from `header` (already [`check`]ed).
+pub(crate) fn write_header(data: &mut Data, header: &Header) {
+    let mut out = String::with_capacity(1024);
     out.push_str("ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((");
     write_str(&mut out, &header.description);
     out.push_str("),");
@@ -74,10 +74,12 @@ pub(crate) fn write_file(header: &Header, data_body: &str) -> String {
     out.push_str(");\nFILE_SCHEMA((");
     write_str(&mut out, ap::FILE_SCHEMA);
     out.push_str("));\nENDSEC;\nDATA;\n");
-    out.push_str(data_body);
-    out.push_str("ENDSEC;\nEND-ISO-10303-21;\n");
-    out
+    data.raw(&out);
 }
+
+/// The file's close: the end of the DATA section and of the exchange
+/// structure.
+pub(crate) const FOOTER: &str = "ENDSEC;\nEND-ISO-10303-21;\n";
 
 fn check_length(field: &'static str, s: &str) -> Result<(), Error> {
     let chars = s.chars().count();
