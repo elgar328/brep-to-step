@@ -1,6 +1,6 @@
 [package]
 name = "brep-to-step"
-version = "0.2.0"
+version = "0.2.1-dev"
 edition = "2024"
 rust-version = "1.85"
 description = "A minimal STEP AP242 exporter for B-rep CAD kernels."
