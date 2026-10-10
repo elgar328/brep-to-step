@@ -3,8 +3,8 @@
 //! can be compared.
 
 use brep_to_step::{
-    Bound, Curve, Edge, Face, Frame, Header, NurbsCurve, NurbsSurface, Part, Profile, StepWriter,
-    Surface, Units, Vertex, VoidShellNormals,
+    Bound, Curve, Edge, Face, Frame, Header, NurbsCurve, NurbsSurface, Orientation, Part, Profile,
+    StepWriter, Surface, Units, Vertex, VoidShellNormals,
 };
 use step_io::StepBuilder;
 use step_io::build::{
@@ -121,6 +121,17 @@ pub struct Handles {
     pub faces: Vec<Face>,
 }
 
+/// A recipe's flag as brep-to-step takes it. Recipes keep step-io's booleans,
+/// so the two players are given the same flags and the differential
+/// comparison catches a conversion that reads them the wrong way round.
+fn orientation(forward: bool) -> Orientation {
+    if forward {
+        Orientation::Forward
+    } else {
+        Orientation::Reversed
+    }
+}
+
 /// Write `scene` into `w`: parts, vertices, edges, faces, then solids.
 pub fn replay<W: std::io::Write>(w: &mut StepWriter<W>, scene: &Scene) -> Handles {
     let parts: Vec<Part> = scene.parts.iter().map(|p| w.part(&p.name)).collect();
@@ -145,7 +156,11 @@ pub fn replay<W: std::io::Write>(w: &mut StepWriter<W>, scene: &Scene) -> Handle
                 .bounds
                 .iter()
                 .map(|b| {
-                    let loop_edges = b.edges.iter().map(|&(i, fwd)| (edges[i], fwd)).collect();
+                    let loop_edges = b
+                        .edges
+                        .iter()
+                        .map(|&(i, forward)| (edges[i], orientation(forward)))
+                        .collect();
                     if b.outer {
                         Bound::outer(loop_edges)
                     } else {
@@ -153,7 +168,7 @@ pub fn replay<W: std::io::Write>(w: &mut StepWriter<W>, scene: &Scene) -> Handle
                     }
                 })
                 .collect();
-            w.face(f.surface.clone(), f.same_sense, &bounds)
+            w.face(f.surface.clone(), orientation(f.same_sense), &bounds)
                 .expect("face")
         })
         .collect();

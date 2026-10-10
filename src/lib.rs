@@ -15,7 +15,7 @@
 //! ```
 //! use std::collections::HashMap;
 //!
-//! use brep_to_step::{Bound, Curve, Frame, Header, StepWriter, Surface, Units};
+//! use brep_to_step::{Bound, Curve, Frame, Header, Orientation, StepWriter, Surface, Units};
 //!
 //! // Vertex i sits at (x, y, z), where i = x + 2y + 4z.
 //! let points: Vec<[f64; 3]> = (0..8u8)
@@ -63,8 +63,13 @@
 //!                 edge
 //!             }
 //!         };
-//!         // `true` if the loop runs along the edge from its start to its end.
-//!         bound.push((edge, a < b));
+//!         // The edge was written from its lower vertex to its higher one.
+//!         let along = if a < b {
+//!             Orientation::Forward
+//!         } else {
+//!             Orientation::Reversed
+//!         };
+//!         bound.push((edge, along));
 //!     }
 //!     let [p, q] = [points[cycle[0]], points[cycle[1]]];
 //!     let plane = Frame {
@@ -72,7 +77,8 @@
 //!         axis: normal,
 //!         ref_dir: [q[0] - p[0], q[1] - p[1], q[2] - p[2]],
 //!     };
-//!     shell.push(w.face(Surface::Plane(plane), true, &[Bound::outer(bound)])?);
+//!     let face = w.face(Surface::Plane(plane), Orientation::Forward, &[Bound::outer(bound)])?;
+//!     shell.push(face);
 //! }
 //! w.solid(part, &shell)?;
 //!
@@ -156,5 +162,5 @@ pub use geometry::{Curve, Frame, Profile, Surface};
 pub use header::Header;
 pub use nurbs::{NurbsCurve, NurbsSurface};
 pub use product::Part;
-pub use topology::{Bound, Edge, Face, Vertex, VoidShellNormals};
+pub use topology::{Bound, Edge, Face, Orientation, Vertex, VoidShellNormals};
 pub use writer::StepWriter;

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Error::Io`, for a failure to write to the output.
 - `StepWriter::<Vec<u8>>::finish_to_string`, which ends a file written to
   memory and returns its text.
+- `Orientation` (`Forward` or `Reversed`): which way a face, or an edge in a
+  face's loop, is used relative to the geometry it lies on.
 
 ### Changed
 
@@ -26,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A part with no solid is written as a part with no shape, as step-io writes
   it, instead of being an error.
 - `Error` no longer implements `Clone`, since it can hold an `io::Error`.
+- `StepWriter::face` takes an `Orientation` instead of the `same_sense`
+  boolean, and `Bound::outer` and `Bound::inner` take `(Edge, Orientation)`
+  pairs instead of `(Edge, bool)`, so a call says which way it means.
 
 ### Removed
 

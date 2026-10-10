@@ -9,7 +9,7 @@ use crate::geometry::{self, Curve, Surface};
 use crate::header::{self, Header};
 use crate::p21::{Data, Ref};
 use crate::product::{self, Part, PendingPart};
-use crate::topology::{self, Bound, Edge, Face, Vertex, VoidShellNormals};
+use crate::topology::{self, Bound, Edge, Face, Orientation, Vertex, VoidShellNormals};
 
 /// Gives every writer its own id, which its handles carry.
 static NEXT_WRITER: AtomicU64 = AtomicU64::new(0);
@@ -143,9 +143,11 @@ impl<W: Write> StepWriter<W> {
         })
     }
 
-    /// Add a face on `surface`, bounded by `bounds`. `same_sense` is `true`
-    /// if the face's outward normal points the same way as the surface's
-    /// normal.
+    /// Add a face on `surface`, bounded by `bounds`. `orientation` says
+    /// whether the face's normal is the surface's normal or its reverse. On a
+    /// solid's outer shell the face's normal must point out of the material,
+    /// into free space; on a void's shell it may point either way, as
+    /// declared by [`VoidShellNormals`].
     ///
     /// # Errors
     ///
@@ -158,7 +160,7 @@ impl<W: Write> StepWriter<W> {
     pub fn face(
         &mut self,
         surface: Surface,
-        same_sense: bool,
+        orientation: Orientation,
         bounds: &[Bound],
     ) -> Result<Face, Error> {
         surface.check()?;
@@ -181,7 +183,7 @@ impl<W: Write> StepWriter<W> {
             }
         }
         let geometry = geometry::write_surface(&mut self.data, &surface);
-        let entity = topology::write_face(&mut self.data, geometry, same_sense, bounds);
+        let entity = topology::write_face(&mut self.data, geometry, orientation, bounds);
         self.spill();
         Ok(Face {
             writer: self.id,
