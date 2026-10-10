@@ -63,8 +63,14 @@ throughout.
    - Push, and wait for CI to pass:
      ```sh
      git push origin dev
-     gh run watch
+     # The run for the commit just pushed; if none is listed yet, wait a
+     # moment and ask again.
+     run=$(gh run list --commit "$(git rev-parse HEAD)" --json databaseId -q '.[0].databaseId')
+     gh run watch "$run" --exit-status
      ```
+     Pick the run by its commit: the latest run on `dev` may still be the
+     previous commit's, already green. Without `--exit-status`, `gh run watch`
+     exits 0 even when the run fails.
    - If CI fails, fix it on `dev` and go back to step 3. Nothing has reached
      `main` or a tag yet, so there is nothing to undo.
 
@@ -93,7 +99,7 @@ throughout.
 8. **Return to `dev` and start the next cycle**
    ```sh
    git checkout dev
-   git merge main
+   git merge main --no-edit
    ```
    - Bump `version` in `Cargo.toml` to the next patch with `-dev`
      (`X.Y.Z` → `X.Y.(Z+1)-dev`); the next release may still choose a minor
