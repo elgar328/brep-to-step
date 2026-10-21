@@ -188,7 +188,7 @@ pub use context::{LengthUnit, Units};
 pub use error::Error;
 pub use geometry::{Curve, Frame, Profile, Surface};
 pub use header::Header;
-pub use nurbs::{NurbsCurve, NurbsSurface};
+pub use nurbs::{NurbsCurve, NurbsSurface, compress_knots};
 pub use product::Part;
 pub use topology::{Bound, Edge, Face, Orientation, Vertex, VoidShellNormals};
 pub use writer::StepWriter;

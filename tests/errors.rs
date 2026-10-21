@@ -8,7 +8,7 @@ use std::f64::consts::FRAC_PI_2;
 use brep_to_step::Orientation::{Forward, Reversed};
 use brep_to_step::{
     Bound, Curve, Error, Frame, NurbsCurve, NurbsSurface, Profile, StepWriter, Surface, Units,
-    VoidShellNormals,
+    VoidShellNormals, compress_knots,
 };
 use common::fixtures::{LineKind, cube, cubic, grid};
 use common::scene::{Handles, header, replay, write_ours};
@@ -906,6 +906,35 @@ fn nurbs_reason(result: Result<(), Error>) -> &'static str {
     match result {
         Err(Error::InvalidNurbs { reason }) => reason,
         other => panic!("expected InvalidNurbs, got {other:?}"),
+    }
+}
+
+/// `compress_knots` checks nothing, because a bad expanded vector still
+/// breaks a rule once split, and the writer finds it: here, given the cubic's
+/// five control points (an expanded vector of nine knots).
+#[test]
+fn compressed_knots_keep_their_errors() {
+    let cases: [(&[f64], &str); 4] = [
+        (
+            &[0.0, 0.0, 0.0, 0.0, 1.0, 0.5, 1.0, 1.0, 1.0],
+            "knots must increase",
+        ),
+        // Without its first and last knot, as some libraries store it.
+        (
+            &[0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0],
+            "multiplicities must sum to control points + degree + 1",
+        ),
+        (&[], "needs at least two distinct knots"),
+        (
+            &[0.0, 0.0, 0.0, 0.0, f64::NAN, 1.0, 1.0, 1.0, 1.0],
+            "knots must be finite",
+        ),
+    ];
+    for (expanded, reason) in cases {
+        let result = nurbs_curve_error(|c| {
+            (c.knots, c.multiplicities) = compress_knots(expanded);
+        });
+        assert_eq!(nurbs_reason(result), reason, "{expanded:?}");
     }
 }
 

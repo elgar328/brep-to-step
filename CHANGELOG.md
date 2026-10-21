@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   allows a negative one, but Open CASCADE cannot read it.
 - `Error::ZeroSpan` rejects a parabola or hyperbola edge whose two vertices
   sit at the same parameter on the curve.
+- `compress_knots` splits an expanded knot vector, as many kernels hold one,
+  into the distinct knots and multiplicities `NurbsCurve` and `NurbsSurface`
+  take. It compares neighbouring values exactly and leaves them as given.
 
 ## [0.2.0] - 2026-10-11
 
