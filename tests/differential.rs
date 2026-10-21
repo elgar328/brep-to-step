@@ -1,6 +1,6 @@
 //! Every test shape, written by brep-to-step and by step-io: the two files
 //! must have the same structure, and step-io must read brep-to-step's back
-//! without dropping or fixing anything.
+//! without dropping, fixing, or warning about anything.
 
 mod common;
 
@@ -23,6 +23,11 @@ fn check(scene: &Scene) -> String {
         "normalized: {:?}",
         report.normalized
     );
+    assert!(
+        report.parse_warnings.is_empty(),
+        "parse warnings: {:?}",
+        report.parse_warnings
+    );
     ours
 }
 
@@ -42,6 +47,11 @@ fn check_named(name: &str, scene: &Scene) -> String {
         report.normalized.is_empty(),
         "{name}: normalized {:?}",
         report.normalized
+    );
+    assert!(
+        report.parse_warnings.is_empty(),
+        "{name}: parse warnings {:?}",
+        report.parse_warnings
     );
     ours
 }

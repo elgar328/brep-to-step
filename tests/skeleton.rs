@@ -87,6 +87,11 @@ fn reads_back_cleanly() {
             "normalized: {:?}",
             report.normalized
         );
+        assert!(
+            report.parse_warnings.is_empty(),
+            "parse warnings: {:?}",
+            report.parse_warnings
+        );
     }
 }
 
