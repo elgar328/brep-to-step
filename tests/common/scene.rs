@@ -7,10 +7,24 @@ use brep_to_step::{
     StepWriter, Surface, Units, Vertex, VoidShellNormals,
 };
 use step_io::StepBuilder;
-use step_io::build::{
-    CurveInput, FaceBoundInput, HeaderInput, NurbsCurve as StepIoNurbsCurve,
-    NurbsSurface as StepIoNurbsSurface, ProfileInput, SurfaceInput,
-};
+use step_io::build::{CurveInput, FaceBoundInput, ProfileInput, SurfaceInput};
+use step_io::scene::{NurbsCurve as StepIoNurbsCurve, NurbsSurface as StepIoNurbsSurface};
+
+/// step-io's orientation for a forward flag.
+fn step_io_orientation(forward: bool) -> step_io::Orientation {
+    if forward {
+        step_io::Orientation::Forward
+    } else {
+        step_io::Orientation::Reversed
+    }
+}
+
+/// A finished step-io model as Part 21 text.
+pub fn step_io_text(model: &step_io::StepModel) -> String {
+    let mut out = Vec::new();
+    step_io::write(model, &mut out).expect("write");
+    String::from_utf8(out).expect("UTF-8")
+}
 
 /// The header time stamp both players write.
 pub const STAMP: &str = "2026-10-07T12:00:00";
@@ -211,16 +225,9 @@ pub fn write_ours(scene: &Scene) -> String {
 
 /// `scene` written by step-io's `StepBuilder`, call for call.
 pub fn write_step_io(scene: &Scene) -> String {
-    let mut b = StepBuilder::new().expect("builder");
-    b.header(&HeaderInput {
-        timestamp: Some(STAMP.to_owned()),
-        ..Default::default()
-    });
-    let parts: Vec<_> = scene
-        .parts
-        .iter()
-        .map(|p| b.part(&p.name).expect("part"))
-        .collect();
+    let mut b = StepBuilder::new();
+    STAMP.clone_into(&mut b.header_mut().time_stamp);
+    let parts: Vec<_> = scene.parts.iter().map(|p| b.part(&p.name)).collect();
     let vertices: Vec<_> = scene
         .vertices
         .iter()
@@ -245,7 +252,7 @@ pub fn write_step_io(scene: &Scene) -> String {
                     let loop_edges = bound
                         .edges
                         .iter()
-                        .map(|&(i, fwd)| (edges[i], fwd))
+                        .map(|&(i, fwd)| (edges[i], step_io_orientation(fwd)))
                         .collect();
                     if bound.outer {
                         FaceBoundInput::outer(loop_edges)
@@ -254,8 +261,12 @@ pub fn write_step_io(scene: &Scene) -> String {
                     }
                 })
                 .collect();
-            b.face(step_io_surface(&f.surface), f.same_sense, bounds)
-                .expect("face")
+            b.face(
+                step_io_surface(&f.surface),
+                step_io_orientation(f.same_sense),
+                bounds,
+            )
+            .expect("face")
         })
         .collect();
     for (part, spec) in parts.iter().zip(&scene.parts) {
@@ -280,7 +291,7 @@ pub fn write_step_io(scene: &Scene) -> String {
             }
         }
     }
-    b.finish().expect("finish")
+    step_io_text(&b.finish())
 }
 
 fn step_io_frame(f: &Frame) -> step_io::build::Frame {

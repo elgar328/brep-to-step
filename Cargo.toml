@@ -16,7 +16,7 @@ exclude = [".github/", ".claude/", "CLAUDE.md"]
 [dev-dependencies]
 # The oracle: tests author the same shape through step-io's `StepBuilder` and
 # compare, and read every output back through step-io's strict reader.
-step-io = "0.2.5"
+step-io = "0.3"
 
 [lints.rust]
 unsafe_code = "deny"

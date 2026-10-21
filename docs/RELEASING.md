@@ -49,7 +49,7 @@ throughout.
      needs the updated `Cargo.lock`, so it comes after the gates:
      ```sh
      rustup toolchain install 1.85 --profile minimal   # once
-     cargo +1.85 check --locked
+     cargo +1.85 test --workspace --locked
      ```
 
 4. **Commit and push `dev`**

@@ -18,7 +18,11 @@ fn check(scene: &Scene) -> String {
     assert_same_structure(&ours, &write_step_io(scene));
     let (_, report) = step_io::read(ours.as_bytes()).expect("read");
     assert!(report.dropped.is_empty(), "dropped: {:?}", report.dropped);
-    assert!(report.norm.is_empty(), "normalized: {:?}", report.norm);
+    assert!(
+        report.normalized.is_empty(),
+        "normalized: {:?}",
+        report.normalized
+    );
     ours
 }
 
@@ -35,9 +39,9 @@ fn check_named(name: &str, scene: &Scene) -> String {
         report.dropped
     );
     assert!(
-        report.norm.is_empty(),
+        report.normalized.is_empty(),
         "{name}: normalized {:?}",
-        report.norm
+        report.normalized
     );
     ours
 }

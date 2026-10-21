@@ -531,7 +531,7 @@ fn surface_coverage() -> Vec<(&'static str, Scene)> {
     ]
 }
 
-/// Part names brep-to-step escapes and step-io writes raw.
+/// Part names that need escapes in a STRING literal.
 fn name_coverage() -> Vec<(&'static str, Scene)> {
     vec![
         (

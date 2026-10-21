@@ -244,7 +244,7 @@ fn extreme_values_never_panic() {
         "{sweeps} of {CALLS} sweeps written"
     );
     let text = w.finish_to_string().expect("finish");
-    if let Err(e) = step_io::parser::parse(&text) {
+    if let Err(e) = step_io::parser::parse(text.as_bytes()) {
         panic!("output does not parse: {e}");
     }
 }
