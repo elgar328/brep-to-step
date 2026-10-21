@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Curve::Parabola` and `Curve::Hyperbola` write an edge along a parabola or
   a hyperbola branch. Which way the edge runs along its curve is found from
   its vertices and written as the edge's `same_sense`, so either order of the
-  vertices works.
+  vertices works. A parabola's focal distance must be positive: STEP also
+  allows a negative one, but Open CASCADE cannot read it.
 - `Error::ZeroSpan` rejects a parabola or hyperbola edge whose two vertices
   sit at the same parameter on the curve.
 

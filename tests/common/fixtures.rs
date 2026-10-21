@@ -423,9 +423,9 @@ fn cone_cut(
 }
 
 /// The cone less what lies beyond a plane parallel to one of its sides:
-/// the plane 2x + z = 2·`offset` (parallel to the side through
-/// (radius, 0, 0)), keeping the part below it, which holds the base's
-/// centre but not the apex. The cut face meets the side in a parabola, run
+/// the plane through (`offset`, y, 0) parallel to the side through
+/// (radius, 0, 0), keeping the part below it, which holds the base's centre
+/// but not the apex. The cut face meets the side in a parabola, run
 /// from y < 0 to y > 0, the way its parameter grows.
 fn cone_parabola_cut(offset: f64) -> Scene {
     let slope = CONE_HEIGHT / CONE_RADIUS;

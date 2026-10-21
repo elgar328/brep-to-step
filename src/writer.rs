@@ -120,17 +120,26 @@ impl<W: Write> StepWriter<W> {
     ///
     /// # Errors
     ///
-    /// [`Error::ForeignHandle`] for a vertex from another writer;
-    /// [`Error::InvalidNumber`] or [`Error::ZeroVector`] for a bad line
-    /// direction; [`Error::ZeroLengthLine`] for a straight edge whose
-    /// vertices are at the same point, and [`Error::InvalidNumber`] for one
-    /// whose vertices are so close together or so far apart that its length
-    /// cannot be computed. For a curve on a frame,
-    /// [`Error::ZeroVector`] or [`Error::ParallelAxes`] for a bad frame and
-    /// [`Error::InvalidNumber`] for a bad size. For a parabola or hyperbola,
-    /// [`Error::ZeroSpan`] when the vertices sit at the same parameter, and
-    /// [`Error::InvalidNumber`] when the frame or vertices are so extreme
-    /// that where they sit cannot be computed.
+    /// [`Error::ForeignHandle`] for a vertex from another writer. Otherwise
+    /// it depends on the curve:
+    ///
+    /// - A straight edge: [`Error::InvalidNumber`] or [`Error::ZeroVector`]
+    ///   for a bad direction; [`Error::ZeroLengthLine`] when its vertices are
+    ///   at the same point, and [`Error::InvalidNumber`] when they are so
+    ///   close together or so far apart that its length cannot be computed.
+    /// - A curve on a frame: [`Error::InvalidNumber`], [`Error::ZeroVector`],
+    ///   or [`Error::ParallelAxes`] for a bad frame, and
+    ///   [`Error::InvalidNumber`] for a bad size.
+    /// - A parabola or hyperbola, as well: [`Error::ZeroSpan`] when the
+    ///   vertices sit at the same parameter, and [`Error::InvalidNumber`]
+    ///   when the frame or vertices are so extreme that where they sit cannot
+    ///   be computed.
+    /// - A polyline: [`Error::Empty`] for fewer than two points, and
+    ///   [`Error::InvalidNumber`] for a point that is not finite.
+    /// - A NURBS curve: [`Error::InvalidNurbs`] for knots, multiplicities, or
+    ///   a weight count that break STEP's B-spline rules, and
+    ///   [`Error::InvalidNumber`] for a control point that is not finite or a
+    ///   weight that is not finite and positive.
     // Taken by value like every input: callers build one per call.
     #[allow(clippy::needless_pass_by_value)]
     pub fn edge(&mut self, start: Vertex, end: Vertex, curve: Curve) -> Result<Edge, Error> {
