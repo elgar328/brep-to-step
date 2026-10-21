@@ -138,6 +138,19 @@ pub enum Profile {
 }
 
 /// The surface a face lies on.
+///
+/// Each surface has a normal, the side a face with
+/// [`Orientation::Forward`](crate::Orientation::Forward) faces. STEP fixes it:
+///
+/// - A plane's normal is its frame's axis.
+/// - A cylinder's, cone's, sphere's, or torus's points away from its axis,
+///   centre, or tube centre: out of the solid it would bound.
+/// - A linear extrusion's is the profile's tangent, the way its parameter
+///   grows, crossed with the sweep.
+/// - A surface of revolution's and a B-spline surface's is `∂σ/∂u × ∂σ/∂v`:
+///   for a revolution, u turns counter-clockwise about the axis and v runs
+///   along the profile; for a B-spline, u steps from one row of control
+///   points to the next and v along a row.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Surface {
@@ -170,7 +183,9 @@ pub enum Surface {
         minor_radius: f64,
     },
     /// A cone around the frame's axis, with `radius` in the frame's XY plane
-    /// and its side at `semi_angle` to the axis. A `radius` of 0 puts the
+    /// and its side at `semi_angle` to the axis. The radius grows along the
+    /// axis: at a distance `v` along it, it is `radius + v·tan(semi_angle)`,
+    /// so the apex lies against the axis direction. A `radius` of 0 puts the
     /// apex at the origin.
     Cone {
         /// The cone's placement: a point on its axis, the axis, and where its

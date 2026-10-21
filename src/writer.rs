@@ -42,7 +42,8 @@ pub struct StepWriter<W> {
     io_error: Option<io::Error>,
     data: Data,
     skeleton: Skeleton,
-    /// Each vertex's entity and position; straight edges need the position.
+    /// Each vertex's entity and position; straight and conic edges need the
+    /// position.
     vertices: Vec<(Ref, [f64; 3])>,
     parts: Vec<PendingPart>,
 }
@@ -164,7 +165,8 @@ impl<W: Write> StepWriter<W> {
     }
 
     /// Add a face on `surface`, bounded by `bounds`. `orientation` says
-    /// whether the face's normal is the surface's normal or its reverse. On a
+    /// whether the face's normal is the surface's normal (see [`Surface`])
+    /// or its reverse. On a
     /// solid's outer shell the face's normal must point out of the material,
     /// into free space; on a void's shell it may point either way, as
     /// declared by [`VoidShellNormals`].
@@ -175,7 +177,8 @@ impl<W: Write> StepWriter<W> {
     /// [`Error::Empty`] for no bounds or a bound with no edges;
     /// [`Error::MultipleOuterBounds`]; and the surface's own errors
     /// ([`Error::InvalidNumber`], [`Error::ZeroVector`],
-    /// [`Error::ParallelAxes`]).
+    /// [`Error::ParallelAxes`], and for B-spline data, its own or its
+    /// profile's, [`Error::InvalidNurbs`]).
     #[allow(clippy::needless_pass_by_value)] // see `edge`
     pub fn face(
         &mut self,

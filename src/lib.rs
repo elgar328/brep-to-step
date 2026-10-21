@@ -120,9 +120,9 @@
 //!
 //! The writer sends the file to its output as it goes, in chunks of 64 KiB,
 //! instead of holding the text in memory. What it keeps grows only with the
-//! vertices — 32 bytes each, for the edges between them that are worked out
-//! from their vertices — and with the parts and their solids, a small
-//! fraction of the file. To get the file as text, write to a `Vec<u8>` and
+//! vertices — 32 bytes each, kept because a straight or conic edge is
+//! worked out from its vertices' positions — and with the parts and their
+//! solids, a small fraction of the file. To get the file as text, write to a `Vec<u8>` and
 //! end with [`finish_to_string`](StepWriter::finish_to_string), as above;
 //! the whole file is then in memory, so write a large one to a
 //! [`File`](std::fs::File) instead.
@@ -132,7 +132,7 @@
 //! Every `f64` is written in the shortest form that reads back to the same
 //! bits. No value given is normalized or recomputed: a kernel that knows an
 //! edge's exact direction can pass it as [`Curve::LineAlong`], and the file
-//! keeps that direction as it is.
+//! keeps that direction bit for bit.
 //!
 //! A few things are derived from the input rather than given: a
 //! [`Curve::Line`]'s direction, from its vertices; a [`Curve::LineAlong`]
@@ -147,8 +147,8 @@
 //! Each call checks its input before writing anything. It rejects, among
 //! other things, numbers that are not finite, zero directions, parallel frame
 //! axes, straight edges of zero length, parabola and hyperbola edges with
-//! no span, empty lists, NURBS data that breaks
-//! STEP's B-spline rules, and handles from another writer. A call that
+//! no span, empty lists, NURBS data that breaks STEP's B-spline rules, and
+//! handles from another writer. A call that
 //! returns an [`Error`] writes nothing, so the writer stays usable. Whether
 //! the geometry agrees with the topology (a vertex lying on its edge's curve,
 //! a loop that closes) is not checked; that is up to the caller.
