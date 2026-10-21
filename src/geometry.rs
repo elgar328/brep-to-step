@@ -23,6 +23,14 @@ pub struct Frame {
 }
 
 /// The curve an edge lies on.
+///
+/// An edge runs from its start vertex to its end vertex. For a straight
+/// line, a parabola, or a hyperbola, the writer works out which way the
+/// curve runs from the vertices, so they may come in either order. A
+/// circle, an ellipse, a polyline, and a B-spline carry their own direction
+/// — a circle's frame axis, a polyline's point order, a B-spline's
+/// parameter — and that direction must run from the start vertex to the end
+/// vertex. See [the crate documentation](crate#which-way-an-edge-runs).
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Curve {
@@ -86,10 +94,14 @@ pub enum Curve {
         /// The semi-axis across it, which sets the asymptotes; positive.
         semi_imag_axis: f64,
     },
-    /// A piecewise-linear curve through at least two points. The first and
-    /// last points usually sit at the edge's vertices.
+    /// A piecewise-linear curve through at least two points, run from the
+    /// first point to the last. The edge's start vertex sits at the first
+    /// point and its end vertex at the last.
     Polyline(Vec<[f64; 3]>),
-    /// A B-spline curve, rational or not.
+    /// A B-spline curve, rational or not, run the way its parameter grows.
+    /// The edge's start vertex sits where the curve starts — at the first
+    /// control point, for a curve whose end knots repeat `degree + 1` times —
+    /// and its end vertex where the curve ends.
     Nurbs(NurbsCurve),
 }
 

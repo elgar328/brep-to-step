@@ -98,6 +98,24 @@
 //! same, so the caller keeps that map. A part given no solid is written as a
 //! part with no shape.
 //!
+//! # Which way an edge runs
+//!
+//! An edge runs from its start vertex to its end vertex, and its curve must
+//! run the same way. For some curves the writer works out that direction
+//! from the vertices; the rest carry their own direction, which the caller
+//! keeps in step:
+//!
+//! | Curve | Vertex order |
+//! |---|---|
+//! | [`Line`](Curve::Line), [`LineAlong`](Curve::LineAlong), [`Parabola`](Curve::Parabola), [`Hyperbola`](Curve::Hyperbola) | Either: the line's direction is computed or turned round, and a conic edge's sense is found from its vertices. |
+//! | [`Circle`](Curve::Circle), [`Ellipse`](Curve::Ellipse) | The arc runs counter-clockwise about the frame's axis from start to end; negate the axis for the other arc. |
+//! | [`Polyline`](Curve::Polyline), [`Nurbs`](Curve::Nurbs) | The start vertex where the curve starts (a polyline's first point), the end vertex where it ends. |
+//!
+//! A face whose loop crosses an edge the other way uses it with
+//! [`Orientation::Reversed`]; that is how two faces share one edge.
+//! A kernel that starts each edge where its curve's parameter is lowest can
+//! pass its edges as they are.
+//!
 //! # Streaming
 //!
 //! The writer sends the file to its output as it goes, in chunks of 64 KiB,
