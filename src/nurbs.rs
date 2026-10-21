@@ -502,6 +502,8 @@ mod tests {
         assert_eq!(multiplicities, [2, 2]);
     }
 
+    /// For a vector that never decreases, the knots come out strictly
+    /// increasing — every run merged — and expand back to the input.
     #[test]
     fn expanding_the_result_gives_the_input_back() {
         for expanded in [
@@ -511,6 +513,7 @@ mod tests {
             vec![-3.25, -3.25, 0.1, 0.1, 1e300, 1e300, 1e300],
         ] {
             let (knots, multiplicities) = compress_knots(&expanded);
+            assert!(knots.windows(2).all(|w| w[0] < w[1]), "{knots:?}");
             assert_eq!(bits(&expand(&knots, &multiplicities)), bits(&expanded));
         }
     }
