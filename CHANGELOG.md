@@ -9,13 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Curve::Parabola` and `Curve::Hyperbola`, for edges along a parabola or
+- `Curve::Parabola` and `Curve::Hyperbola` describe edges along a parabola or
   one branch of a hyperbola. Which way an edge runs along its curve is found
   from its vertices and written as the edge's `same_sense`, so the vertices
   may come in either order. The focal distance must be positive: STEP also
   allows a negative one, but Open CASCADE cannot read it, so a parabola that
-  opens the other way is given with its frame's reference direction
-  reversed.
+  opens the other way is given with its frame's reference direction reversed.
 - `Error::ZeroSpan` reports a parabola or hyperbola edge whose two vertices
   sit at the same parameter on the curve.
 - `compress_knots` turns an expanded knot vector, the form many kernels keep,
