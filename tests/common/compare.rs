@@ -6,20 +6,9 @@
 //! entity referred to — and the two files must hold the same multiset of
 //! fingerprints. The HEADER is not compared, except for `FILE_SCHEMA`.
 //!
-//! # Known differences
-//!
-//! Where the two writers differ on purpose, the comparison first brings the
-//! files to common ground. Each rule applies to one side only:
-//!
-//! 1. **APD year** (step-io side). step-io 0.2.5 writes
-//!    `APPLICATION_PROTOCOL_DEFINITION(..., 2011, ...)`; brep-to-step writes
-//!    2020, the year edition 2 was published. step-io's 2011 is read as 2020.
-//!    Remove this rule once the step-io dev-dependency writes 2020 itself
-//!    (0.2.6) — the comparison fails when the rule is never used, to say so.
-//! 2. **String escapes** (brep-to-step side). brep-to-step writes non-ASCII
-//!    characters as `\X2\`/`\X4\` escapes and `\` as `\\`; step-io writes
-//!    both raw, and its parser decodes neither. brep-to-step's strings are
-//!    decoded before comparing. Permanent.
+//! Strings are compared decoded: brep-to-step writes non-ASCII characters
+//! as `\X2\`/`\X4\` escapes and `\` as `\\`, and step-io's parser undoes
+//! every escape on reading.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -27,13 +16,14 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use step_io::parser::{Attribute, RawEntity, parse};
 
 /// Compare a brep-to-step file (`ours`) with a step-io file (`step_io`).
-/// The order matters: the known-difference rules apply to one side each.
 ///
 /// Every check runs, and every problem found is reported in the one `Err`,
 /// so one difference never hides another.
 pub fn compare(ours: &str, step_io: &str) -> Result<(), String> {
-    let ours = parse(ours).map_err(|e| format!("brep-to-step output does not parse: {e}"))?;
-    let theirs = parse(step_io).map_err(|e| format!("step-io output does not parse: {e}"))?;
+    let ours =
+        parse(ours.as_bytes()).map_err(|e| format!("brep-to-step output does not parse: {e}"))?;
+    let theirs =
+        parse(step_io.as_bytes()).map_err(|e| format!("step-io output does not parse: {e}"))?;
     let mut problems = Vec::new();
 
     let ours_schema = header_attributes(&ours.header, "FILE_SCHEMA");
@@ -44,18 +34,7 @@ pub fn compare(ours: &str, step_io: &str) -> Result<(), String> {
         ));
     }
 
-    let mut ours_entities = ours.entities;
-    decode_strings(&mut ours_entities);
-    let mut theirs_entities = theirs.entities;
-    if read_apd_year_as_2020(&mut theirs_entities) == 0 {
-        problems.push(
-            "known difference 1 (APD year) was never used: step-io no longer writes 2011, \
-             so remove the rule"
-                .to_owned(),
-        );
-    }
-
-    match (Census::of(&ours_entities), Census::of(&theirs_entities)) {
+    match (Census::of(&ours.entities), Census::of(&theirs.entities)) {
         (Ok(ours), Ok(theirs)) => problems.extend(ours.differences(&theirs)),
         (ours, theirs) => {
             if let Err(e) = ours {
@@ -91,91 +70,6 @@ pub fn header_attributes(header: &[RawEntity], name: &str) -> Option<Vec<Attribu
         } if n == name => Some(attributes.clone()),
         _ => None,
     })
-}
-
-/// Decode a Part 21 string's escapes: `\\`, `\X2\…\X0\` (four hex digits
-/// per character), and `\X4\…\X0\` (eight). The lexer has already undone
-/// `''`. Panics on any other escape — brep-to-step writes no other.
-pub fn decode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(i) = rest.find('\\') {
-        out.push_str(&rest[..i]);
-        rest = &rest[i..];
-        if let Some(after) = rest.strip_prefix("\\\\") {
-            out.push('\\');
-            rest = after;
-            continue;
-        }
-        let digits = if rest.starts_with("\\X2\\") {
-            4
-        } else if rest.starts_with("\\X4\\") {
-            8
-        } else {
-            panic!("unsupported escape at {rest:?} in {s:?}");
-        };
-        let end = rest
-            .find("\\X0\\")
-            .unwrap_or_else(|| panic!("unterminated escape in {s:?}"));
-        let hex = &rest[4..end];
-        assert!(
-            hex.len() % digits == 0,
-            "escape length {} is not a multiple of {digits} in {s:?}",
-            hex.len()
-        );
-        for chunk in hex.as_bytes().chunks(digits) {
-            let chunk = std::str::from_utf8(chunk).expect("ascii hex");
-            let code = u32::from_str_radix(chunk, 16)
-                .unwrap_or_else(|_| panic!("bad hex {chunk:?} in {s:?}"));
-            out.push(char::from_u32(code).unwrap_or_else(|| panic!("bad code {code:#x}")));
-        }
-        rest = &rest[end + 4..];
-    }
-    out.push_str(rest);
-    out
-}
-
-/// Known difference 2: decode every string attribute.
-fn decode_strings(entities: &mut BTreeMap<u64, RawEntity>) {
-    fn visit(a: &mut Attribute) {
-        match a {
-            Attribute::String(s) => *s = decode(s),
-            Attribute::List(items) => items.iter_mut().for_each(visit),
-            Attribute::Typed { value, .. } => visit(value),
-            _ => {}
-        }
-    }
-    for entity in entities.values_mut() {
-        match entity {
-            RawEntity::Simple { attributes, .. } => attributes.iter_mut().for_each(visit),
-            RawEntity::Complex { parts, .. } => parts
-                .iter_mut()
-                .flat_map(|p| p.attributes.iter_mut())
-                .for_each(visit),
-        }
-    }
-}
-
-/// Known difference 1: read step-io's APD year 2011 as 2020. Returns how
-/// many entities it changed.
-fn read_apd_year_as_2020(entities: &mut BTreeMap<u64, RawEntity>) -> usize {
-    let mut changed = 0;
-    for entity in entities.values_mut() {
-        let RawEntity::Simple {
-            name, attributes, ..
-        } = entity
-        else {
-            continue;
-        };
-        if name != "APPLICATION_PROTOCOL_DEFINITION" {
-            continue;
-        }
-        if let Some(year @ Attribute::Integer(2011)) = attributes.get_mut(2) {
-            *year = Attribute::Integer(2020);
-            changed += 1;
-        }
-    }
-    changed
 }
 
 /// Every entity's fingerprint, counted, with a readable form of each.

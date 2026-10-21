@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-21
+
+### Added
+
+- `Curve::Parabola` and `Curve::Hyperbola` describe edges along a parabola or
+  one branch of a hyperbola. Which way an edge runs along its curve is found
+  from its vertices and written as the edge's `same_sense`, so the vertices
+  may come in either order. The focal distance must be positive: STEP also
+  allows a negative one, but Open CASCADE cannot read it, so a parabola that
+  opens the other way is given with its frame's reference direction reversed.
+- `Error::ZeroSpan` reports a parabola or hyperbola edge whose two vertices
+  sit at the same parameter on the curve.
+- `compress_knots` turns an expanded knot vector, the form many kernels keep,
+  into the distinct knots and multiplicities that `NurbsCurve` and
+  `NurbsSurface` take. Neighbouring values are merged only when exactly
+  equal, and no value is changed.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added
@@ -70,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writer, parts with no solid, and header strings over 256 characters.
 - Reproducible output: the same input always produces the same bytes.
 
-[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/elgar328/brep-to-step/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/elgar328/brep-to-step/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/elgar328/brep-to-step/releases/tag/v0.1.0

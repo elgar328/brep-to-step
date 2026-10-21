@@ -271,8 +271,7 @@ pub(crate) fn write_str(out: &mut String, s: &str) {
 mod tests {
     use super::{Data, Param, Ref, write_real, write_str};
     use step_io::StepBuilder;
-    use step_io::build::HeaderInput;
-    use step_io::parser::lexer::{TokenKind, tokenize};
+    use step_io::parser::{Attribute, RawEntity, parse};
 
     fn real(v: f64) -> String {
         let mut out = String::new();
@@ -347,13 +346,12 @@ mod tests {
     /// What step-io writes for `v`, read off the one `CARTESIAN_POINT` of a
     /// builder holding a single vertex (no part, so no origin placement).
     fn step_io_real(v: f64) -> String {
-        let mut b = StepBuilder::new().expect("builder");
-        b.header(&HeaderInput {
-            timestamp: Some(String::new()),
-            ..Default::default()
-        });
+        let mut b = StepBuilder::new();
+        b.header_mut().time_stamp = String::new();
         b.vertex([v, 0.0, 0.0]).expect("vertex");
-        let text = b.finish().expect("finish");
+        let mut out = Vec::new();
+        step_io::write(&b.finish(), &mut out).expect("write");
+        let text = String::from_utf8(out).expect("UTF-8");
         let points: Vec<&str> = text
             .lines()
             .filter(|l| l.contains(" = CARTESIAN_POINT("))
@@ -366,11 +364,19 @@ mod tests {
         coords.split(',').next().expect("x").to_owned()
     }
 
-    /// Lex `src` alone and return its single token.
-    fn single_token(src: &str) -> TokenKind {
-        let tokens = tokenize(src).unwrap_or_else(|e| panic!("{src} does not lex: {e}"));
-        assert_eq!(tokens.len(), 1, "{src} lexes to {tokens:?}");
-        tokens.into_iter().next().expect("one token").kind
+    /// Parse `src` as the one attribute of an entity and return it.
+    fn single_value(src: &str) -> Attribute {
+        let file = format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\n\
+             FILE_NAME('','',(''),(''),'','','');\nFILE_SCHEMA(('X'));\nENDSEC;\n\
+             DATA;\n#1=X({src});\nENDSEC;\nEND-ISO-10303-21;\n"
+        );
+        let graph = parse(file.as_bytes()).unwrap_or_else(|e| panic!("{src} does not parse: {e}"));
+        let Some(RawEntity::Simple { attributes, .. }) = graph.get(1) else {
+            panic!("{src}: no entity");
+        };
+        assert_eq!(attributes.len(), 1, "{src} parses to {attributes:?}");
+        attributes[0].clone()
     }
 
     #[test]
@@ -392,8 +398,8 @@ mod tests {
             .chain((0..100_000).map(|_| rng.finite()));
         for v in values {
             let text = real(v);
-            let TokenKind::Real(back) = single_token(&text) else {
-                panic!("{text} is not a REAL token");
+            let Attribute::Real(back) = single_value(&text) else {
+                panic!("{text} does not read back as a REAL");
             };
             // `+ 0.0` folds -0 into +0, which is what `0.` reads back as.
             assert_eq!(
@@ -435,11 +441,10 @@ mod tests {
         for (input, expected) in cases {
             let text = string(input);
             assert_eq!(text, expected, "input {input:?}");
-            // The lexer strips the quotes and undoes `''`, nothing else.
-            let raw = expected[1..expected.len() - 1].replace("''", "'");
+            // The parser decodes every escape back to the input.
             assert_eq!(
-                single_token(&text),
-                TokenKind::String(raw),
+                single_value(&text),
+                Attribute::String(input.to_owned()),
                 "input {input:?}"
             );
         }

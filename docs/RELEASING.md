@@ -49,7 +49,7 @@ throughout.
      needs the updated `Cargo.lock`, so it comes after the gates:
      ```sh
      rustup toolchain install 1.85 --profile minimal   # once
-     cargo +1.85 check --locked
+     cargo +1.85 test --workspace --locked
      ```
 
 4. **Commit and push `dev`**
@@ -126,7 +126,8 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org/):
 - **PATCH** (`0.0.X`) — backwards-compatible bug fixes.
 
 While the version is `0.x.y`, the minor version takes the place of the major:
-a breaking change bumps the minor version (the crate is experimental).
+a breaking change bumps the minor version (the crate is experimental), and
+the patch version takes everything else, new features and fixes alike.
 
 ## CHANGELOG Guidelines
 

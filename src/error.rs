@@ -7,9 +7,10 @@ use std::{fmt, io};
 #[derive(Debug)]
 pub enum Error {
     /// A number that cannot be written: NaN, an infinity, or a value outside
-    /// the range its entity allows. It may also be a length computed from
-    /// the input — a straight edge's or an extrusion's — that comes out as 0
-    /// or infinity because the input is too small or too large.
+    /// the range its entity allows. It may also be a value computed from
+    /// the input that comes out as 0 or infinity because the input is too
+    /// small or too large: a straight edge's or an extrusion's length, or
+    /// where a parabola or hyperbola edge's vertices sit along its curve.
     InvalidNumber {
         /// Which input the number was given for.
         what: &'static str,
@@ -28,6 +29,10 @@ pub enum Error {
     },
     /// A straight edge whose two vertices are at the same point.
     ZeroLengthLine,
+    /// A parabola or hyperbola edge whose two vertices sit at the same place
+    /// along the frame's Y direction — the same parameter on the curve — so
+    /// the edge has no span.
+    ZeroSpan,
     /// A list with fewer entries than it needs.
     Empty {
         /// Which list.
@@ -67,6 +72,7 @@ impl fmt::Display for Error {
             Self::ZeroLengthLine => {
                 f.write_str("straight edge with both vertices at the same point")
             }
+            Self::ZeroSpan => f.write_str("parabola or hyperbola edge without a span"),
             Self::Empty { what } => write!(f, "too few {what}"),
             Self::InvalidNurbs { reason } => write!(f, "invalid NURBS: {reason}"),
             Self::MultipleOuterBounds => f.write_str("face with more than one outer bound"),

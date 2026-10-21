@@ -17,7 +17,7 @@ A minimal STEP AP242 exporter for B-rep CAD kernels.
 - **Kernel-neutral** — takes plain inputs (`[f64; 3]`, frames, curves,
   surfaces), so a small adapter is all a kernel needs.
 - **Exact** — every `f64` is written in the shortest form that reads back to
-  the same bits; nothing is normalized or recomputed.
+  the same bits; no value given is normalized or recomputed.
 - **Fails cleanly** — input is checked before anything is written, so a call
   that returns an error leaves the file untouched.
 - **Streaming** — writes the file as it goes instead of holding its text in

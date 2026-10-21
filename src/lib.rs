@@ -98,12 +98,31 @@
 //! same, so the caller keeps that map. A part given no solid is written as a
 //! part with no shape.
 //!
+//! # Which way an edge runs
+//!
+//! An edge runs from its start vertex to its end vertex, and its curve must
+//! run the same way. For some curves the writer works out that direction
+//! from the vertices; the rest carry their own direction, which the caller
+//! keeps in step:
+//!
+//! | Curve | Vertex order |
+//! |---|---|
+//! | [`Line`](Curve::Line), [`LineAlong`](Curve::LineAlong), [`Parabola`](Curve::Parabola), [`Hyperbola`](Curve::Hyperbola) | Either: the line's direction is computed or turned round, and a conic edge's sense is found from its vertices. |
+//! | [`Circle`](Curve::Circle), [`Ellipse`](Curve::Ellipse) | The arc runs counter-clockwise about the frame's axis from start to end; negate the axis for the other arc. |
+//! | [`Polyline`](Curve::Polyline), [`Nurbs`](Curve::Nurbs) | The start vertex where the curve starts (a polyline's first point), the end vertex where it ends. |
+//!
+//! A face whose loop crosses an edge the other way uses it with
+//! [`Orientation::Reversed`]; that is how two faces share one edge.
+//! A kernel that starts each edge where its curve's parameter is lowest can
+//! pass its edges as they are.
+//!
 //! # Streaming
 //!
 //! The writer sends the file to its output as it goes, in chunks of 64 KiB,
 //! instead of holding the text in memory. What it keeps grows only with the
-//! vertices — 32 bytes each, for the straight edges between them — and with
-//! the parts and their solids, a small fraction of the file. To get the file as text, write to a `Vec<u8>` and
+//! vertices — 32 bytes each, kept because a straight or conic edge is
+//! worked out from its vertices' positions — and with the parts and their
+//! solids, a small fraction of the file. To get the file as text, write to a `Vec<u8>` and
 //! end with [`finish_to_string`](StepWriter::finish_to_string), as above;
 //! the whole file is then in memory, so write a large one to a
 //! [`File`](std::fs::File) instead.
@@ -111,16 +130,25 @@
 //! # Values are written exactly
 //!
 //! Every `f64` is written in the shortest form that reads back to the same
-//! bits. Nothing is normalized or recomputed: a kernel that knows an edge's
-//! exact direction can pass it as [`Curve::LineAlong`], and the file keeps
-//! that direction as it is.
+//! bits. No value given is normalized or recomputed: a kernel that knows an
+//! edge's exact direction can pass it as [`Curve::LineAlong`], and the file
+//! keeps that direction bit for bit.
+//!
+//! A few things are derived from the input rather than given: a
+//! [`Curve::Line`]'s direction, from its vertices; a [`Curve::LineAlong`]
+//! direction negated when it points from the end back to the start; an
+//! extrusion's unit direction and length, from its sweep vector; and whether
+//! a [`Curve::Parabola`] or [`Curve::Hyperbola`] edge runs the way its
+//! curve's parameter grows, found from its vertices and written as the
+//! edge's flag.
 //!
 //! # Errors leave nothing behind
 //!
 //! Each call checks its input before writing anything. It rejects, among
 //! other things, numbers that are not finite, zero directions, parallel frame
-//! axes, straight edges of zero length, empty lists, NURBS data that breaks
-//! STEP's B-spline rules, and handles from another writer. A call that
+//! axes, straight edges of zero length, parabola and hyperbola edges with
+//! no span, empty lists, NURBS data that breaks STEP's B-spline rules, and
+//! handles from another writer. A call that
 //! returns an [`Error`] writes nothing, so the writer stays usable. Whether
 //! the geometry agrees with the topology (a vertex lying on its edge's curve,
 //! a loop that closes) is not checked; that is up to the caller.
@@ -160,7 +188,7 @@ pub use context::{LengthUnit, Units};
 pub use error::Error;
 pub use geometry::{Curve, Frame, Profile, Surface};
 pub use header::Header;
-pub use nurbs::{NurbsCurve, NurbsSurface};
+pub use nurbs::{NurbsCurve, NurbsSurface, compress_knots};
 pub use product::Part;
 pub use topology::{Bound, Edge, Face, Orientation, Vertex, VoidShellNormals};
 pub use writer::StepWriter;

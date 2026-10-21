@@ -23,6 +23,14 @@ pub struct Frame {
 }
 
 /// The curve an edge lies on.
+///
+/// An edge runs from its start vertex to its end vertex. For a straight
+/// line, a parabola, or a hyperbola, the writer works out which way the
+/// curve runs from the vertices, so they may come in either order. A
+/// circle, an ellipse, a polyline, and a B-spline carry their own direction
+/// — a circle's frame axis, a polyline's point order, a B-spline's
+/// parameter — and that direction must run from the start vertex to the end
+/// vertex. See [the crate documentation](crate#which-way-an-edge-runs).
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Curve {
@@ -58,10 +66,42 @@ pub enum Curve {
         /// The semi-axis across it; positive.
         semi_axis_2: f64,
     },
-    /// A piecewise-linear curve through at least two points. The first and
-    /// last points usually sit at the edge's vertices.
+    /// A parabola in the frame's XY plane with its apex at the frame's
+    /// origin, opening along the reference direction. (For one that opens
+    /// the other way, turn the reference direction round: STEP also allows a
+    /// negative focal distance for that, but Open CASCADE cannot read one.)
+    /// The edge is the span between its two vertices, which must differ.
+    /// Whether the edge runs the way the curve's parameter grows is worked
+    /// out from the vertices and written as the edge's flag; either order of
+    /// the vertices is fine.
+    Parabola {
+        /// The parabola's placement: its apex, the normal of its plane, and
+        /// its axis of symmetry.
+        frame: Frame,
+        /// The distance from the apex to the focus; positive.
+        focal_distance: f64,
+    },
+    /// The branch of a hyperbola that lies along the frame's reference
+    /// direction, in the frame's XY plane, centred at the frame's origin.
+    /// As with a [`Parabola`](Self::Parabola), the edge is the span between
+    /// its two vertices, and which way it runs is worked out from them.
+    Hyperbola {
+        /// The hyperbola's placement: its centre, the normal of its plane,
+        /// and the direction of the branch.
+        frame: Frame,
+        /// The distance from the centre to the branch's apex; positive.
+        semi_axis: f64,
+        /// The semi-axis across it, which sets the asymptotes; positive.
+        semi_imag_axis: f64,
+    },
+    /// A piecewise-linear curve through at least two points, run from the
+    /// first point to the last. The edge's start vertex sits at the first
+    /// point and its end vertex at the last.
     Polyline(Vec<[f64; 3]>),
-    /// A B-spline curve, rational or not.
+    /// A B-spline curve, rational or not, run the way its parameter grows.
+    /// The edge's start vertex sits where the curve starts — at the first
+    /// control point, for a curve whose end knots repeat `degree + 1` times —
+    /// and its end vertex where the curve ends.
     Nurbs(NurbsCurve),
 }
 
@@ -98,6 +138,19 @@ pub enum Profile {
 }
 
 /// The surface a face lies on.
+///
+/// Each surface has a normal, the side a face with
+/// [`Orientation::Forward`](crate::Orientation::Forward) faces. STEP fixes it:
+///
+/// - A plane's normal is its frame's axis.
+/// - A cylinder's, cone's, sphere's, or torus's points away from its axis,
+///   centre, or tube centre: out of the solid it would bound.
+/// - A linear extrusion's is the profile's tangent, the way its parameter
+///   grows, crossed with the sweep.
+/// - A surface of revolution's and a B-spline surface's is `∂σ/∂u × ∂σ/∂v`:
+///   for a revolution, u turns counter-clockwise about the axis and v runs
+///   along the profile; for a B-spline, u steps from one row of control
+///   points to the next and v along a row.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Surface {
@@ -130,7 +183,9 @@ pub enum Surface {
         minor_radius: f64,
     },
     /// A cone around the frame's axis, with `radius` in the frame's XY plane
-    /// and its side at `semi_angle` to the axis. A `radius` of 0 puts the
+    /// and its side at `semi_angle` to the axis. The radius grows along the
+    /// axis: at a distance `v` along it, it is `radius + v·tan(semi_angle)`,
+    /// so the apex lies against the axis direction. A `radius` of 0 puts the
     /// apex at the origin.
     Cone {
         /// The cone's placement: a point on its axis, the axis, and where its
@@ -182,7 +237,7 @@ fn check_direction(what: &'static str, d: [f64; 3]) -> Result<(), Error> {
     Ok(())
 }
 
-/// A length — radius, semi-axis — must be finite and positive.
+/// A length — radius, semi-axis, focal distance — must be finite and positive.
 fn check_positive(what: &'static str, value: f64) -> Result<(), Error> {
     if value.is_finite() && value > 0.0 {
         Ok(())
@@ -241,26 +296,80 @@ fn check_ellipse(frame: &Frame, semi_axis_1: f64, semi_axis_2: f64) -> Result<()
     check_positive("ellipse semi-axis", semi_axis_2)
 }
 
+/// Whether an edge from `start` to `end` on a parabola or hyperbola in
+/// `frame` runs the way the curve's parameter grows, which is along the
+/// frame's Y direction.
+///
+/// The Y direction is step-io's `StepBuilder::edge` arithmetic term for
+/// term, so both find the same answer. Unlike step-io, the positions are
+/// compared undivided: dividing by the focal distance cannot change their
+/// order, but can round two different positions to the same value.
+// Exactly equal positions only, as in `check_direction`.
+#[allow(clippy::float_cmp)]
+fn conic_ahead(
+    what: &'static str,
+    frame: &Frame,
+    start: [f64; 3],
+    end: [f64; 3],
+) -> Result<bool, Error> {
+    let (axis, ref_dir) = (frame.axis, frame.ref_dir);
+    let along = dot(ref_dir, axis) / dot(axis, axis);
+    let x_dir = [
+        ref_dir[0] - along * axis[0],
+        ref_dir[1] - along * axis[1],
+        ref_dir[2] - along * axis[2],
+    ];
+    let y_dir = cross(axis, x_dir);
+    let from = dot(sub(start, frame.origin), y_dir);
+    let to = dot(sub(end, frame.origin), y_dir);
+    if let Some(&value) = [from, to].iter().find(|v| !v.is_finite()) {
+        return Err(Error::InvalidNumber { what, value });
+    }
+    if from == to {
+        return Err(Error::ZeroSpan);
+    }
+    Ok(from < to)
+}
+
 impl Curve {
-    /// Check the curve for an edge from `start` to `end`. Only a straight
-    /// edge needs distinct ends: a circle's full-circle edge starts and ends
-    /// at one vertex.
-    pub(crate) fn check(&self, start: [f64; 3], end: [f64; 3]) -> Result<(), Error> {
+    /// Check the curve for an edge from `start` to `end`, and return the
+    /// edge's `same_sense`: whether it runs the way the curve's parameter
+    /// grows. Straight edges and open conics need distinct ends; a circle's
+    /// full-circle edge starts and ends at one vertex.
+    pub(crate) fn same_sense(&self, start: [f64; 3], end: [f64; 3]) -> Result<bool, Error> {
         match self {
             Curve::Line => {
                 check_not_coincident(start, end)?;
-                check_unit("line length", sub(end, start))
+                check_unit("line length", sub(end, start))?;
             }
             Curve::LineAlong(direction) => {
                 check_direction("line direction", *direction)?;
-                check_not_coincident(start, end)
+                check_not_coincident(start, end)?;
             }
-            Curve::Circle { frame, radius } => check_circle(frame, *radius),
+            Curve::Circle { frame, radius } => check_circle(frame, *radius)?,
             Curve::Ellipse {
                 frame,
                 semi_axis_1,
                 semi_axis_2,
-            } => check_ellipse(frame, *semi_axis_1, *semi_axis_2),
+            } => check_ellipse(frame, *semi_axis_1, *semi_axis_2)?,
+            Curve::Parabola {
+                frame,
+                focal_distance,
+            } => {
+                frame.check("parabola frame")?;
+                check_positive("parabola focal distance", *focal_distance)?;
+                return conic_ahead("parabola span", frame, start, end);
+            }
+            Curve::Hyperbola {
+                frame,
+                semi_axis,
+                semi_imag_axis,
+            } => {
+                frame.check("hyperbola frame")?;
+                check_positive("hyperbola semi-axis", *semi_axis)?;
+                check_positive("hyperbola semi-axis", *semi_imag_axis)?;
+                return conic_ahead("hyperbola span", frame, start, end);
+            }
             Curve::Polyline(points) => {
                 if points.len() < 2 {
                     return Err(Error::Empty {
@@ -269,10 +378,11 @@ impl Curve {
                 }
                 points
                     .iter()
-                    .try_for_each(|&p| check_finite("polyline point", p))
+                    .try_for_each(|&p| check_finite("polyline point", p))?;
             }
-            Curve::Nurbs(curve) => curve.check(),
+            Curve::Nurbs(curve) => curve.check()?,
         }
+        Ok(true)
     }
 }
 
@@ -358,6 +468,10 @@ fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [
         a[1] * b[2] - a[2] * b[1],
@@ -404,8 +518,7 @@ pub(crate) fn write_curve(data: &mut Data, curve: &Curve, start: [f64; 3], end: 
     match curve {
         Curve::Line => write_line(data, start, unit(delta).0),
         Curve::LineAlong(direction) => {
-            let along = direction[0] * delta[0] + direction[1] * delta[1] + direction[2] * delta[2];
-            let direction = if along < 0.0 {
+            let direction = if dot(*direction, delta) < 0.0 {
                 direction.map(|c| -c)
             } else {
                 *direction
@@ -418,6 +531,15 @@ pub(crate) fn write_curve(data: &mut Data, curve: &Curve, start: [f64; 3], end: 
             semi_axis_1,
             semi_axis_2,
         } => write_placed(data, "ELLIPSE", frame, &[*semi_axis_1, *semi_axis_2]),
+        Curve::Parabola {
+            frame,
+            focal_distance,
+        } => write_placed(data, "PARABOLA", frame, &[*focal_distance]),
+        Curve::Hyperbola {
+            frame,
+            semi_axis,
+            semi_imag_axis,
+        } => write_placed(data, "HYPERBOLA", frame, &[*semi_axis, *semi_imag_axis]),
         Curve::Polyline(points) => {
             let points: Vec<Ref> = points.iter().map(|&p| write_point(data, p)).collect();
             data.simple("POLYLINE", &[Param::Str(""), Param::Refs(&points)])

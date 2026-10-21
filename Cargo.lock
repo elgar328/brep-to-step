@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "brep-to-step"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "step-io",
 ]
@@ -99,11 +99,12 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "step-io"
-version = "0.2.5"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "749d04bbe46d889fd83b7f6676786f2ebea0654c1e0503c242e774027c2bb893"
+checksum = "c80cd4ee8e13a35d24b48590efc44772f4323d0534d84c3d9fa0621fd82b18c4"
 dependencies = [
  "logos",
+ "memchr",
 ]
 
 [[package]]

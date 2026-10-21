@@ -4,9 +4,9 @@
 mod common;
 
 use brep_to_step::{Error, Header, LengthUnit, StepWriter, Units};
-use common::compare::{assert_same_structure, compare, decode, header_attributes};
+use common::compare::{assert_same_structure, compare, header_attributes};
 use step_io::StepBuilder;
-use step_io::build::{HeaderInput, LengthUnit as StepIoLength, UnitsInput};
+use step_io::build::{LengthUnit as StepIoLength, UnitsInput};
 use step_io::parser::{Attribute, parse};
 
 const STAMP: &str = "2026-10-07T12:00:00";
@@ -35,11 +35,8 @@ fn step_io(units: Units) -> String {
         uncertainty: units.uncertainty,
     })
     .expect("builder");
-    b.header(&HeaderInput {
-        timestamp: Some(STAMP.to_owned()),
-        ..Default::default()
-    });
-    b.finish().expect("finish")
+    STAMP.clone_into(&mut b.header_mut().time_stamp);
+    common::scene::step_io_text(&b.finish())
 }
 
 fn unit_choices() -> [Units; 3] {
@@ -77,7 +74,6 @@ fn comparison_reports_a_difference() {
         !report.contains("APPLICATION_PROTOCOL_DEFINITION"),
         "{report}"
     );
-    assert!(!report.contains("known difference"), "{report}");
 }
 
 #[test]
@@ -86,19 +82,28 @@ fn reads_back_cleanly() {
         let text = ours(units);
         let (_, report) = step_io::read(text.as_bytes()).expect("read");
         assert!(report.dropped.is_empty(), "dropped: {:?}", report.dropped);
-        assert!(report.norm.is_empty(), "normalized: {:?}", report.norm);
+        assert!(
+            report.normalized.is_empty(),
+            "normalized: {:?}",
+            report.normalized
+        );
+        assert!(
+            report.parse_warnings.is_empty(),
+            "parse warnings: {:?}",
+            report.parse_warnings
+        );
     }
 }
 
-/// A header attribute's string, decoded.
+/// A header attribute's string (the parser decodes its escapes).
 fn text(a: &Attribute) -> String {
     match a {
-        Attribute::String(s) => decode(s),
+        Attribute::String(s) => s.clone(),
         other => panic!("not a string: {other:?}"),
     }
 }
 
-/// A header attribute's string list, decoded.
+/// A header attribute's string list.
 fn texts(a: &Attribute) -> Vec<String> {
     match a {
         Attribute::List(items) => items.iter().map(text).collect(),
@@ -123,7 +128,7 @@ fn header_fields_round_trip() {
         .expect("finish");
     assert!(file.is_ascii(), "non-ASCII output:\n{file}");
 
-    let graph = parse(&file).expect("parse");
+    let graph = parse(file.as_bytes()).expect("parse");
     let name = header_attributes(&graph.header, "FILE_NAME").expect("FILE_NAME");
     assert_eq!(text(&name[0]), header.file_name);
     assert_eq!(text(&name[1]), header.timestamp);

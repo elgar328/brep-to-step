@@ -1,14 +1,14 @@
 //! Every test shape, written by brep-to-step and by step-io: the two files
 //! must have the same structure, and step-io must read brep-to-step's back
-//! without dropping or fixing anything.
+//! without dropping, fixing, or warning about anything.
 
 mod common;
 
 use brep_to_step::{Curve, Surface, VoidShellNormals};
 use common::compare::{assert_same_structure, compare};
 use common::fixtures::{
-    LineKind, coverage, cube, cubic, cylinder, grid, hollow_box, plate_with_hole, quarter_arc,
-    real_solids, two_parts, two_solids_one_part,
+    LineKind, conic_coverage, coverage, cube, cubic, cylinder, grid, hollow_box, plate_with_hole,
+    quarter_arc, real_solids, two_parts, two_solids_one_part,
 };
 use common::scene::{PartSpec, Scene, write_ours, write_step_io};
 
@@ -18,7 +18,16 @@ fn check(scene: &Scene) -> String {
     assert_same_structure(&ours, &write_step_io(scene));
     let (_, report) = step_io::read(ours.as_bytes()).expect("read");
     assert!(report.dropped.is_empty(), "dropped: {:?}", report.dropped);
-    assert!(report.norm.is_empty(), "normalized: {:?}", report.norm);
+    assert!(
+        report.normalized.is_empty(),
+        "normalized: {:?}",
+        report.normalized
+    );
+    assert!(
+        report.parse_warnings.is_empty(),
+        "parse warnings: {:?}",
+        report.parse_warnings
+    );
     ours
 }
 
@@ -35,9 +44,14 @@ fn check_named(name: &str, scene: &Scene) -> String {
         report.dropped
     );
     assert!(
-        report.norm.is_empty(),
+        report.normalized.is_empty(),
         "{name}: normalized {:?}",
-        report.norm
+        report.normalized
+    );
+    assert!(
+        report.parse_warnings.is_empty(),
+        "{name}: parse warnings {:?}",
+        report.parse_warnings
     );
     ours
 }
@@ -240,4 +254,38 @@ fn unit_weights_stay_rational() {
     let mut scene = find(coverage(), "nurbs_edge");
     scene.edges[0].curve = Curve::Nurbs(cubic());
     assert_eq!(count(&write_ours(&scene), "B_SPLINE_CURVE_WITH_KNOTS"), 1);
+}
+
+/// The `same_sense` of the one `EDGE_CURVE` on the file's `curve` entity.
+fn edge_sense(file: &str, curve: &str) -> bool {
+    let id = file
+        .lines()
+        .find_map(|l| l.split_once(&format!(" = {curve}(")).map(|(id, _)| id))
+        .unwrap_or_else(|| panic!("no {curve}"));
+    let edge = file
+        .lines()
+        .find(|l| l.contains(" = EDGE_CURVE(") && l.contains(&format!(",{id},")))
+        .unwrap_or_else(|| panic!("no edge on {curve}"));
+    match edge.rsplit(',').next() {
+        Some(".T.);") => true,
+        Some(".F.);") => false,
+        other => panic!("bad flag {other:?} in {edge}"),
+    }
+}
+
+/// A conic edge's flag says whether it runs the way its curve's parameter
+/// grows. The expected value comes from the parameters the fixture placed
+/// its vertices at, not from the writer's arithmetic or step-io's.
+#[test]
+fn conic_edges_follow_their_curve() {
+    for case in conic_coverage() {
+        let file = check_named(case.name, &case.scene);
+        let curve = if case.name.starts_with("parabola") {
+            "PARABOLA"
+        } else {
+            "HYPERBOLA"
+        };
+        assert_eq!(count(&file, curve), 1, "{}", case.name);
+        assert_eq!(edge_sense(&file, curve), case.same_sense, "{}", case.name);
+    }
 }
