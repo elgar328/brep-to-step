@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-21
+
 ### Added
 
 - `Curve::Parabola` and `Curve::Hyperbola` describe edges along a parabola or
@@ -85,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writer, parts with no solid, and header strings over 256 characters.
 - Reproducible output: the same input always produces the same bytes.
 
-[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/elgar328/brep-to-step/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/elgar328/brep-to-step/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/elgar328/brep-to-step/releases/tag/v0.1.0
