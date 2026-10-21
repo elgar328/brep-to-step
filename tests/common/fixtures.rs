@@ -342,6 +342,173 @@ pub fn two_solids_one_part() -> Scene {
     scene
 }
 
+/// The cone the conic cuts are made from: base circle of this radius about
+/// the origin in z = 0, apex on the z axis at this height.
+const CONE_RADIUS: f64 = 10.0;
+const CONE_HEIGHT: f64 = 20.0;
+
+/// The cone's lateral surface, as a `CONICAL_SURFACE` whose radius grows
+/// downward from the apex. `seam` is the reference direction, where the
+/// surface's angle starts; it must stay off the face.
+fn cone_surface(seam: [f64; 3]) -> Surface {
+    Surface::Cone {
+        frame: Frame {
+            origin: [0.0; 3],
+            axis: [0.0, 0.0, -1.0],
+            ref_dir: seam,
+        },
+        radius: CONE_RADIUS,
+        semi_angle: (CONE_RADIUS / CONE_HEIGHT).atan(),
+    }
+}
+
+/// A plane face with its normal down, as a solid's base in z = 0.
+fn base_plane() -> Surface {
+    Surface::Plane(Frame {
+        axis: [0.0, 0.0, -1.0],
+        ..upright([0.0; 3])
+    })
+}
+
+/// A solid of three faces — the cone's side, a cut plane, and the base —
+/// meeting in three edges between two vertices: `conic` and `chord` from
+/// vertex 0 to vertex 1, and the base arc from vertex 1 to vertex 0. Every
+/// face's surface normal points out, and each edge runs forwards in one
+/// face's loop and backwards in the other's.
+fn cone_cut(
+    name: &str,
+    vertices: Vec<[f64; 3]>,
+    conic: Curve,
+    arc_frame: Frame,
+    cut: Surface,
+    seam: [f64; 3],
+) -> Scene {
+    let edge = |curve| EdgeSpec {
+        start: 0,
+        end: 1,
+        curve,
+    };
+    let chord = sub(vertices[1], vertices[0]);
+    let edges = vec![
+        edge(conic),
+        EdgeSpec {
+            start: 1,
+            end: 0,
+            curve: Curve::Circle {
+                frame: arc_frame,
+                radius: CONE_RADIUS,
+            },
+        },
+        edge(Curve::LineAlong(unit(chord))),
+    ];
+    let face = |surface, edges| FaceSpec {
+        surface,
+        same_sense: true,
+        bounds: vec![BoundSpec { outer: true, edges }],
+    };
+    let (conic, arc, chord) = (0, 1, 2);
+    Scene {
+        parts: vec![PartSpec {
+            name: name.to_owned(),
+            solids: vec![SolidSpec::plain(vec![0, 1, 2])],
+        }],
+        vertices,
+        edges,
+        faces: vec![
+            face(base_plane(), vec![(arc, false), (chord, false)]),
+            face(cut, vec![(conic, false), (chord, true)]),
+            face(cone_surface(seam), vec![(conic, true), (arc, true)]),
+        ],
+    }
+}
+
+/// The cone less what lies beyond a plane parallel to one of its sides:
+/// the plane 2x + z = 2·`offset` (parallel to the side through
+/// (radius, 0, 0)), keeping the part below it, which holds the base's
+/// centre but not the apex. The cut face meets the side in a parabola, run
+/// from y < 0 to y > 0, the way its parameter grows.
+fn cone_parabola_cut(offset: f64) -> Scene {
+    let slope = CONE_HEIGHT / CONE_RADIUS;
+    let half_chord = (CONE_RADIUS * CONE_RADIUS - offset * offset).sqrt();
+    // The apex sits where the cut meets the side opposite the one it is
+    // parallel to, at radius (radius - offset) / 2.
+    let apex_radius = (CONE_RADIUS - offset) / 2.0;
+    let frame = Frame {
+        origin: [-apex_radius, 0.0, slope * (CONE_RADIUS - apex_radius)],
+        // The cut plane's outward normal.
+        axis: [slope, 0.0, 1.0],
+        // Down the plane's slope, where the parabola opens.
+        ref_dir: [1.0, 0.0, -slope],
+    };
+    cone_cut(
+        "cone_parabola_cut",
+        vec![[offset, -half_chord, 0.0], [offset, half_chord, 0.0]],
+        Curve::Parabola {
+            frame,
+            focal_distance: (CONE_RADIUS - offset) / (2.0 * (1.0 + slope * slope).sqrt()),
+        },
+        // Counter-clockwise from vertex 1 the long way round, through
+        // (-radius, 0, 0); the circle's parameter starts on the side cut away.
+        upright([0.0; 3]),
+        Surface::Plane(frame),
+        // The side the cut is parallel to lies wholly beyond it.
+        [1.0, 0.0, 0.0],
+    )
+}
+
+/// The cone's part beyond the plane x = `offset`, parallel to its axis,
+/// apex excluded. The cut face meets the side in a hyperbola branch, run
+/// from y > 0 to y < 0, against its parameter.
+fn cone_hyperbola_cut(offset: f64) -> Scene {
+    let slope = CONE_HEIGHT / CONE_RADIUS;
+    let half_chord = (CONE_RADIUS * CONE_RADIUS - offset * offset).sqrt();
+    // Away from the piece: where the base arc's and the side's parameters
+    // start.
+    let away = [-1.0, 0.0, 0.0];
+    cone_cut(
+        "cone_hyperbola_cut",
+        vec![[offset, half_chord, 0.0], [offset, -half_chord, 0.0]],
+        Curve::Hyperbola {
+            frame: Frame {
+                origin: [offset, 0.0, CONE_HEIGHT],
+                axis: [1.0, 0.0, 0.0],
+                ref_dir: [0.0, 0.0, -1.0],
+            },
+            semi_axis: slope * offset,
+            semi_imag_axis: offset,
+        },
+        // Counter-clockwise from vertex 1 the short way, through (radius, 0, 0).
+        Frame {
+            ref_dir: away,
+            ..upright([0.0; 3])
+        },
+        Surface::Plane(Frame {
+            origin: [offset, 0.0, 0.0],
+            axis: away,
+            ref_dir: [0.0, 0.0, 1.0],
+        }),
+        away,
+    )
+}
+
+/// The volume of [`cone_parabola_cut`].
+fn cone_parabola_cut_volume(offset: f64) -> f64 {
+    let (r, h) = (CONE_RADIUS, CONE_HEIGHT);
+    let half_chord = (r * r - offset * offset).sqrt();
+    h / (9.0 * r)
+        * (3.0 * r.powi(3) * (PI - (offset / r).acos())
+            - half_chord * (2.0 * r * r - 3.0 * r * offset - 2.0 * offset * offset))
+}
+
+/// The volume of [`cone_hyperbola_cut`].
+fn cone_hyperbola_cut_volume(offset: f64) -> f64 {
+    let (r, h) = (CONE_RADIUS, CONE_HEIGHT);
+    let half_chord = (r * r - offset * offset).sqrt();
+    h / (6.0 * r)
+        * (2.0 * r.powi(3) * (offset / r).acos() - 4.0 * r * offset * half_chord
+            + offset.powi(3) * ((r + half_chord) / (r - half_chord)).ln())
+}
+
 /// A real solid: a closed, valid shape a CAD program should open cleanly,
 /// with what it should measure.
 pub struct RealSolid {
@@ -399,6 +566,16 @@ pub fn real_solids() -> Vec<RealSolid> {
         ),
         solid("two_parts", two_parts(), 2.0),
         solid("two_solids_one_part", two_solids_one_part(), 2.0),
+        solid(
+            "cone_parabola_cut",
+            cone_parabola_cut(3.0),
+            cone_parabola_cut_volume(3.0),
+        ),
+        solid(
+            "cone_hyperbola_cut",
+            cone_hyperbola_cut(4.0),
+            cone_hyperbola_cut_volume(4.0),
+        ),
     ]
 }
 
@@ -406,7 +583,108 @@ pub fn real_solids() -> Vec<RealSolid> {
 /// that need escaping, for comparing with step-io and reading back. Their
 /// shells are open — not solids a CAD program would accept.
 pub fn coverage() -> Vec<(&'static str, Scene)> {
-    [curve_coverage(), surface_coverage(), name_coverage()].concat()
+    let conics = conic_coverage()
+        .into_iter()
+        .map(|c| (c.name, c.scene))
+        .collect();
+    [
+        curve_coverage(),
+        conics,
+        surface_coverage(),
+        name_coverage(),
+    ]
+    .concat()
+}
+
+/// A coverage face bounded by a parabola or hyperbola edge.
+pub struct ConicCase {
+    pub name: &'static str,
+    pub scene: Scene,
+    /// Whether the edge runs the way the curve's parameter grows, known from
+    /// the parameters its vertices were placed at.
+    pub same_sense: bool,
+}
+
+/// A frame tilted away from every axis, its directions not unit length.
+fn tilted() -> Frame {
+    Frame {
+        origin: [1.0, 2.0, 3.0],
+        axis: [0.2, -0.3, 0.9],
+        ref_dir: [0.9, 0.6, 0.0],
+    }
+}
+
+/// A frame's local X and Y directions, unit length.
+fn local_axes(frame: &Frame) -> ([f64; 3], [f64; 3]) {
+    let z = unit(frame.axis);
+    let r = frame.ref_dir;
+    let along = r[0] * z[0] + r[1] * z[1] + r[2] * z[2];
+    let x = unit([
+        r[0] - along * z[0],
+        r[1] - along * z[1],
+        r[2] - along * z[2],
+    ]);
+    (x, cross(z, x))
+}
+
+/// The point at local coordinates (`along_x`, `along_y`) in the frame's
+/// plane.
+fn in_plane(frame: &Frame, along_x: f64, along_y: f64) -> [f64; 3] {
+    let (x, y) = local_axes(frame);
+    let o = frame.origin;
+    [
+        o[0] + along_x * x[0] + along_y * y[0],
+        o[1] + along_x * x[1] + along_y * y[1],
+        o[2] + along_x * x[2] + along_y * y[2],
+    ]
+}
+
+/// The point at parameter `u` on a parabola or hyperbola, by STEP's
+/// parametrizations.
+fn conic_point(curve: &Curve, u: f64) -> [f64; 3] {
+    match curve {
+        Curve::Parabola {
+            frame,
+            focal_distance,
+        } => in_plane(frame, focal_distance * u * u, 2.0 * focal_distance * u),
+        Curve::Hyperbola {
+            frame,
+            semi_axis,
+            semi_imag_axis,
+        } => in_plane(frame, semi_axis * u.cosh(), semi_imag_axis * u.sinh()),
+        other => panic!("not a conic: {other:?}"),
+    }
+}
+
+/// A face in the conic's plane, bounded by the conic edge from parameter
+/// `from` to parameter `to` and a straight edge back.
+fn on_conic(name: &'static str, curve: Curve, from: f64, to: f64) -> ConicCase {
+    let ends = (conic_point(&curve, from), conic_point(&curve, to));
+    ConicCase {
+        name,
+        scene: on_plane_between(curve, ends, tilted()),
+        same_sense: from < to,
+    }
+}
+
+/// Faces bounded by parabola and hyperbola edges, run both ways along their
+/// curves, in a tilted frame.
+pub fn conic_coverage() -> Vec<ConicCase> {
+    let parabola = |focal_distance| Curve::Parabola {
+        frame: tilted(),
+        focal_distance,
+    };
+    let hyperbola = Curve::Hyperbola {
+        frame: tilted(),
+        semi_axis: 3.0,
+        semi_imag_axis: 1.5,
+    };
+    vec![
+        on_conic("parabola_edge", parabola(2.0), -1.0, 2.0),
+        on_conic("parabola_edge_reversed", parabola(2.0), 2.0, -1.0),
+        on_conic("hyperbola_edge", hyperbola.clone(), -1.0, 1.5),
+        on_conic("hyperbola_edge_reversed", hyperbola, 1.5, -1.0),
+    ]
 }
 
 /// A plane face bounded by each kind of curve.
@@ -655,6 +933,12 @@ fn on_plane_open(curve: Curve) -> Scene {
         ),
         other => panic!("no ends known for {other:?}"),
     };
+    on_plane_between(curve, ends, upright([0.0; 3]))
+}
+
+/// A face on the plane of `frame`, bounded by an edge along `curve` between
+/// `ends` and a straight edge back.
+fn on_plane_between(curve: Curve, ends: ([f64; 3], [f64; 3]), frame: Frame) -> Scene {
     single_face(
         vec![ends.0, ends.1],
         vec![
@@ -669,7 +953,7 @@ fn on_plane_open(curve: Curve) -> Scene {
                 curve: Curve::Line,
             },
         ],
-        Surface::Plane(upright([0.0; 3])),
+        Surface::Plane(frame),
         vec![(0, true), (1, false)],
     )
 }

@@ -101,7 +101,15 @@ pub(crate) fn write_vertex(data: &mut Data, p: [f64; 3]) -> Ref {
     data.simple("VERTEX_POINT", &[Param::Str(""), Param::Ref(point)])
 }
 
-pub(crate) fn write_edge(data: &mut Data, start: Ref, end: Ref, curve: Ref) -> Ref {
+/// An `EDGE_CURVE`; `same_sense` says whether the edge runs the way its
+/// curve's parameter grows.
+pub(crate) fn write_edge(
+    data: &mut Data,
+    start: Ref,
+    end: Ref,
+    curve: Ref,
+    same_sense: bool,
+) -> Ref {
     data.simple(
         "EDGE_CURVE",
         &[
@@ -109,7 +117,7 @@ pub(crate) fn write_edge(data: &mut Data, start: Ref, end: Ref, curve: Ref) -> R
             Param::Ref(start),
             Param::Ref(end),
             Param::Ref(curve),
-            Param::Bool(true),
+            Param::Bool(same_sense),
         ],
     )
 }

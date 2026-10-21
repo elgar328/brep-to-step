@@ -125,7 +125,12 @@ impl<W: Write> StepWriter<W> {
     /// direction; [`Error::ZeroLengthLine`] for a straight edge whose
     /// vertices are at the same point, and [`Error::InvalidNumber`] for one
     /// whose vertices are so close together or so far apart that its length
-    /// cannot be computed.
+    /// cannot be computed. For a curve on a frame,
+    /// [`Error::ZeroVector`] or [`Error::ParallelAxes`] for a bad frame and
+    /// [`Error::InvalidNumber`] for a bad size. For a parabola or hyperbola,
+    /// [`Error::ZeroSpan`] when the vertices sit at the same parameter, and
+    /// [`Error::InvalidNumber`] when the frame or vertices are so extreme
+    /// that where they sit cannot be computed.
     // Taken by value like every input: callers build one per call.
     #[allow(clippy::needless_pass_by_value)]
     pub fn edge(&mut self, start: Vertex, end: Vertex, curve: Curve) -> Result<Edge, Error> {
@@ -133,9 +138,15 @@ impl<W: Write> StepWriter<W> {
         self.check_writer(end.writer)?;
         let (start_entity, start_point) = self.vertices[start.index];
         let (end_entity, end_point) = self.vertices[end.index];
-        curve.check(start_point, end_point)?;
+        let same_sense = curve.same_sense(start_point, end_point)?;
         let geometry = geometry::write_curve(&mut self.data, &curve, start_point, end_point);
-        let entity = topology::write_edge(&mut self.data, start_entity, end_entity, geometry);
+        let entity = topology::write_edge(
+            &mut self.data,
+            start_entity,
+            end_entity,
+            geometry,
+            same_sense,
+        );
         self.spill();
         Ok(Edge {
             writer: self.id,

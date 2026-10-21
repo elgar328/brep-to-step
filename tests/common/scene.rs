@@ -312,6 +312,15 @@ fn step_io_curve(curve: &Curve) -> CurveInput {
             semi_axis_1,
             semi_axis_2,
         } => CurveInput::Ellipse(step_io_frame(frame), *semi_axis_1, *semi_axis_2),
+        Curve::Parabola {
+            frame,
+            focal_distance,
+        } => CurveInput::Parabola(step_io_frame(frame), *focal_distance),
+        Curve::Hyperbola {
+            frame,
+            semi_axis,
+            semi_imag_axis,
+        } => CurveInput::Hyperbola(step_io_frame(frame), *semi_axis, *semi_imag_axis),
         Curve::Polyline(points) => CurveInput::Polyline(points.clone()),
         Curve::Nurbs(curve) => CurveInput::Nurbs(step_io_nurbs_curve(curve)),
         other => panic!("no step-io mapping yet for {other:?}"),

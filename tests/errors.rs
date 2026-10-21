@@ -208,7 +208,7 @@ impl XorShift {
     }
 }
 
-/// Straight edges and extrusions from arbitrary finite values, tiny and huge
+/// Straight and parabola edges and extrusions from arbitrary finite values, tiny and huge
 /// alike: each call is accepted or rejected but never panics, and every REAL
 /// the file holds is one Part 21 can read.
 #[test]
@@ -217,11 +217,20 @@ fn extreme_values_never_panic() {
     let mut rng = XorShift(0x9E37_79B9_7F4A_7C15);
     let (mut w, h) = with_cube();
     let bound = Bound::outer(vec![(h.edges[0], Forward)]);
-    let (mut lines, mut sweeps) = (0, 0);
+    let (mut lines, mut parabolas, mut sweeps) = (0, 0, 0);
     for _ in 0..CALLS {
         let start = w.vertex(rng.point()).expect("finite vertex");
         let end = w.vertex(rng.point()).expect("finite vertex");
         lines += usize::from(w.edge(start, end, Curve::Line).is_ok());
+        let parabola = Curve::Parabola {
+            frame: Frame {
+                origin: rng.point(),
+                axis: rng.point(),
+                ref_dir: rng.point(),
+            },
+            focal_distance: 1.0,
+        };
+        parabolas += usize::from(w.edge(start, end, parabola).is_ok());
         let extrusion = Surface::LinearExtrusion {
             profile: Profile::Line {
                 point: [0.0; 3],
@@ -238,6 +247,10 @@ fn extreme_values_never_panic() {
     assert!(
         0 < lines && lines < CALLS,
         "{lines} of {CALLS} lines written"
+    );
+    assert!(
+        0 < parabolas && parabolas < CALLS,
+        "{parabolas} of {CALLS} parabolas written"
     );
     assert!(
         0 < sweeps && sweeps < CALLS,
@@ -345,6 +358,17 @@ fn rejected_calls_leave_no_trace() {
 
     assert!(w.vertex([f64::NAN, 0.0, 0.0]).is_err());
     assert!(w.edge(h.vertices[0], h.vertices[0], Curve::Line).is_err());
+    assert!(
+        w.edge(
+            h.vertices[0],
+            h.vertices[0],
+            Curve::Parabola {
+                frame: frame(),
+                focal_distance: 1.0
+            }
+        )
+        .is_err()
+    );
     assert!(
         w.edge(h.vertices[0], h.vertices[1], Curve::LineAlong([0.0; 3]))
             .is_err()
@@ -559,6 +583,130 @@ fn circle_edges_may_close() {
     };
     assert!(w.edge(h.vertices[0], h.vertices[0], circle.clone()).is_ok());
     assert!(w.edge(h.vertices[0], h.vertices[1], circle).is_ok());
+}
+
+fn parabola(frame: Frame, focal_distance: f64) -> Curve {
+    Curve::Parabola {
+        frame,
+        focal_distance,
+    }
+}
+
+fn hyperbola(frame: Frame, semi_axis: f64, semi_imag_axis: f64) -> Curve {
+    Curve::Hyperbola {
+        frame,
+        semi_axis,
+        semi_imag_axis,
+    }
+}
+
+/// An edge between the cube's vertices 0 and 2, which differ along
+/// `frame()`'s Y direction (vertices 0 and 1 do not).
+fn conic_edge(curve: Curve) -> Result<(), Error> {
+    let (mut w, h) = with_cube();
+    w.edge(h.vertices[0], h.vertices[2], curve).map(|_| ())
+}
+
+#[test]
+fn conic_sizes() {
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -1.0] {
+        assert!(invalid_number(
+            &conic_edge(parabola(frame(), bad)),
+            "parabola focal distance"
+        ));
+        assert!(invalid_number(
+            &conic_edge(hyperbola(frame(), bad, 1.0)),
+            "hyperbola semi-axis"
+        ));
+        assert!(invalid_number(
+            &conic_edge(hyperbola(frame(), 1.0, bad)),
+            "hyperbola semi-axis"
+        ));
+    }
+    assert!(conic_edge(parabola(frame(), 1e-300)).is_ok());
+    assert!(conic_edge(hyperbola(frame(), 1e300, 1e-300)).is_ok());
+}
+
+#[test]
+fn conic_frames_are_checked() {
+    let bad_origin = Frame {
+        origin: [0.0, f64::NAN, 0.0],
+        ..frame()
+    };
+    let zero_axis = Frame {
+        axis: [0.0; 3],
+        ..frame()
+    };
+    let parallel = Frame {
+        ref_dir: [0.0, 0.0, -2.0],
+        ..frame()
+    };
+    assert!(matches!(
+        conic_edge(parabola(bad_origin, 1.0)),
+        Err(Error::InvalidNumber {
+            what: "parabola frame",
+            ..
+        })
+    ));
+    assert!(matches!(
+        conic_edge(hyperbola(zero_axis, 1.0, 1.0)),
+        Err(Error::ZeroVector {
+            what: "hyperbola frame"
+        })
+    ));
+    assert!(matches!(
+        conic_edge(parabola(parallel, 1.0)),
+        Err(Error::ParallelAxes {
+            what: "parabola frame"
+        })
+    ));
+}
+
+/// A parabola or hyperbola edge needs its vertices at different places
+/// along the frame's Y direction — exactly different is enough — and that
+/// place must be computable.
+#[test]
+fn conic_edges_need_a_span() {
+    let (mut w, h) = with_cube();
+    let v0 = h.vertices[0];
+    for curve in [parabola(frame(), 1.0), hyperbola(frame(), 1.0, 1.0)] {
+        // The same vertex, and two vertices differing only along X.
+        for end in [v0, h.vertices[1]] {
+            assert!(matches!(
+                w.edge(v0, end, curve.clone()),
+                Err(Error::ZeroSpan)
+            ));
+        }
+    }
+    // One ulp apart along Y is a span.
+    let near = w.vertex([0.0, f64::from_bits(1), 0.0]).expect("vertex");
+    assert!(w.edge(v0, near, parabola(frame(), 1e300)).is_ok());
+
+    // An axis so short its squared length underflows: Y cannot be found.
+    let tiny_axis = Frame {
+        axis: [0.0, 0.0, 1e-200],
+        ..frame()
+    };
+    assert!(matches!(
+        w.edge(v0, h.vertices[2], parabola(tiny_axis, 1.0)),
+        Err(Error::InvalidNumber {
+            what: "parabola span",
+            ..
+        })
+    ));
+    // A vertex so far from the frame's origin that the offset overflows.
+    let far = w.vertex([0.0, 1e308, 0.0]).expect("vertex");
+    let far_origin = Frame {
+        origin: [0.0, -1e308, 0.0],
+        ..frame()
+    };
+    assert!(matches!(
+        w.edge(v0, far, hyperbola(far_origin, 1.0, 1.0)),
+        Err(Error::InvalidNumber {
+            what: "hyperbola span",
+            ..
+        })
+    ));
 }
 
 #[test]
