@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-27
+
+### Changed
+
+- Files are written as AP242 edition 4 (ISO 10303-242:2025): `FILE_SCHEMA` is
+  `{ 1 0 10303 442 7 1 4 }` and the application protocol year 2025, where they
+  were edition 2's `{ 1 0 10303 442 3 1 4 }` and 2020. The entities written are
+  the same.
+
 ## [0.2.1] - 2026-10-21
 
 ### Added
@@ -87,7 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writer, parts with no solid, and header strings over 256 characters.
 - Reproducible output: the same input always produces the same bytes.
 
-[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/elgar328/brep-to-step/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/elgar328/brep-to-step/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/elgar328/brep-to-step/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/elgar328/brep-to-step/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/elgar328/brep-to-step/releases/tag/v0.1.0
