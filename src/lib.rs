@@ -4,7 +4,7 @@
 //! placements, [curves](Curve), and [surfaces](Surface), up to NURBS) and
 //! topology (vertices, edges, faces, and solids, including solids with
 //! voids). Around them it writes only the product, unit, and context
-//! structure a valid AP242 edition 2 file requires. The API is
+//! structure a valid AP242 edition 4 file requires. The API is
 //! kernel-neutral: the inputs are plain values, so a small adapter in the
 //! kernel can convert its own types into them.
 //!

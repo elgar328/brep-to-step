@@ -12,7 +12,7 @@ A minimal STEP AP242 exporter for B-rep CAD kernels.
 ## Features
 
 - **Write-only, shape-only** — writes geometry and topology, plus only the
-  product, unit, and context structure a valid AP242 edition 2 file
+  product, unit, and context structure a valid AP242 edition 4 file
   requires.
 - **Kernel-neutral** — takes plain inputs (`[f64; 3]`, frames, curves,
   surfaces), so a small adapter is all a kernel needs.
